@@ -26,6 +26,10 @@
         <input type="hidden" name="_method" value="PATCH" />
       <% } %>
 
+      <!-- Marks that the relation fields were actually part of this submission,
+           so the server only syncs relations when the form truly sent them. -->
+      <input type="hidden" name="relationsSubmitted" value="1" />
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <!-- 1. Dish Name -->
         <div class="sm:col-span-2">
@@ -111,7 +115,92 @@
           </label>
         </div>
 
-        <!-- 5. Image Upload & Preview -->
+        <!-- 5. Relations: Ingredients & Chefs (optional) -->
+        <div class="sm:col-span-2">
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[#292820]">
+              Nguyên Liệu & Đầu Bếp
+            </label>
+            <span class="text-[11px] text-[#7A7062]">Không bắt buộc — có thể để trống</span>
+          </div>
+
+          <% if (errors && errors.relations) { %>
+            <div class="mb-3 rounded-xl border border-red-300 bg-red-50/40 px-4 py-2 text-xs text-red-700 font-medium">
+              <%= errors.relations %>
+            </div>
+          <% } %>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Ingredients checkboxes -->
+            <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-2xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-bold text-[#292820]">🥬 Nguyên Liệu</h4>
+                <a href="/admin/ingredients/new" class="text-[11px] font-semibold text-[#B86F45] hover:underline">+ Tạo nguyên liệu</a>
+              </div>
+              <% if (ingredientOptions && ingredientOptions.length > 0) { %>
+                <div class="max-h-56 overflow-y-auto pr-1 space-y-1.5">
+                  <% ingredientOptions.forEach(opt => { %>
+                    <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-[#FFFDF8] cursor-pointer border border-transparent hover:border-[#E9E0D2]">
+                      <input
+                        type="checkbox"
+                        name="ingredientIds"
+                        value="<%= opt.id %>"
+                        class="checkbox checkbox-sm checkbox-success"
+                        <%= selectedIngredientIds.includes(opt.id) ? 'checked' : '' %>
+                      />
+                      <span class="text-sm text-[#292820] font-medium"><%= opt.name %></span>
+                      <% if (opt.unit) { %>
+                        <span class="ml-auto text-[11px] text-[#7A7062]"><%= opt.unit %></span>
+                      <% } %>
+                    </label>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <p class="text-xs text-[#7A7062] py-4 text-center">
+                  Chưa có nguyên liệu nào trong hệ thống. Hãy tạo nguyên liệu trước khi gán vào món ăn.
+                </p>
+              <% } %>
+            </div>
+
+            <!-- Chefs checkboxes -->
+            <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-2xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-bold text-[#292820]">👨‍🍳 Đầu Bếp</h4>
+                <a href="/admin/chefs/new" class="text-[11px] font-semibold text-[#B86F45] hover:underline">+ Tạo đầu bếp</a>
+              </div>
+              <% if (chefOptions && chefOptions.length > 0) { %>
+                <div class="max-h-56 overflow-y-auto pr-1 space-y-1.5">
+                  <% chefOptions.forEach(opt => { %>
+                    <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-[#FFFDF8] cursor-pointer border border-transparent hover:border-[#E9E0D2]">
+                      <input
+                        type="checkbox"
+                        name="chefIds"
+                        value="<%= opt.id %>"
+                        class="checkbox checkbox-sm checkbox-success"
+                        <%= selectedChefIds.includes(opt.id) ? 'checked' : '' %>
+                      />
+                      <span class="w-8 h-8 rounded-full overflow-hidden bg-[#E9E0D2] shrink-0">
+                        <img src="<%= getImageUrl(opt.imagePath) %>" alt="<%= opt.name %>" class="w-full h-full object-cover" onerror="this.src='/images/placeholder.svg'" />
+                      </span>
+                      <span class="min-w-0">
+                        <span class="block text-sm text-[#292820] font-medium truncate"><%= opt.name %></span>
+                        <% if (opt.title) { %>
+                          <span class="block text-[11px] text-[#7A7062] truncate"><%= opt.title %></span>
+                        <% } %>
+                      </span>
+                    </label>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <p class="text-xs text-[#7A7062] py-4 text-center">
+                  Chưa có đầu bếp nào trong hệ thống. Hãy tạo hồ sơ đầu bếp trước khi gán vào món ăn.
+                </p>
+              <% } %>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Image Upload & Preview -->
         <div class="sm:col-span-2 space-y-3">
           <label class="block text-xs font-bold uppercase tracking-wider text-[#292820]">
             Hình Ảnh Món Ăn (Tỉ lệ chuẩn 4:3)
@@ -151,7 +240,7 @@
           </div>
         </div>
 
-        <!-- 6. Description -->
+        <!-- 7. Description -->
         <div class="sm:col-span-2">
           <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
             Mô Tả Hương Vị & Thành Phần

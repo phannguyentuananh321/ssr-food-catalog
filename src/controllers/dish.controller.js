@@ -1,5 +1,5 @@
 const dishService = require('../services/dish.service');
-const { validateDish } = require('../validators/dish.validator');
+const { validateDish, normalizeIdList } = require('../validators/dish.validator');
 const { getImageUrl } = require('../services/image.service');
 
 const SUCCESS_MESSAGES = {
@@ -7,6 +7,25 @@ const SUCCESS_MESSAGES = {
   update: 'Đã cập nhật thông tin món ăn thành công!',
   delete: 'Đã xóa món ăn khỏi hệ thống thành công!'
 };
+
+/**
+ * Build the locals needed to render the create/edit form, including the
+ * available Ingredient and Chef options and the currently selected IDs.
+ */
+async function buildFormLocals({ dish, errors, errorMessage }) {
+  const { ingredients, chefs } = await dishService.getRelationOptions();
+  const selectedIngredientIds = normalizeIdList(dish ? dish.ingredientIds : []);
+  const selectedChefIds = normalizeIdList(dish ? dish.chefIds : []);
+  return {
+    dish,
+    errors: errors || {},
+    errorMessage,
+    ingredientOptions: ingredients,
+    chefOptions: chefs,
+    selectedIngredientIds,
+    selectedChefIds
+  };
+}
 
 /**
  * 1. Public List Page (Option 3: Hero Slider + Món Nổi Bật + Search/Filter/Sort/Pagination)
@@ -98,11 +117,7 @@ async function renderAdminList(req, res, next) {
 async function renderCreateForm(req, res, next) {
   try {
     const categories = await dishService.getCategories();
-
-    res.render('dishes/form', {
-      pageTitle: 'Thêm Món Ăn Mới',
-      currentPath: '/admin/dishes',
-      isEdit: false,
+    const locals = await buildFormLocals({
       dish: {
         name: '',
         category: categories[0] || 'Món chính',
@@ -110,9 +125,16 @@ async function renderCreateForm(req, res, next) {
         description: '',
         isFeatured: false
       },
+      errors: {}
+    });
+
+    res.render('dishes/form', {
+      pageTitle: 'Thêm Món Ăn Mới',
+      currentPath: '/admin/dishes',
+      isEdit: false,
       categories,
-      errors: {},
-      getImageUrl
+      getImageUrl,
+      ...locals
     });
   } catch (error) {
     next(error);
@@ -123,20 +145,23 @@ async function renderCreateForm(req, res, next) {
  * 4. Submit Create Action (PRG)
  */
 async function create(req, res, next) {
+  const categories = await dishService.getCategories().catch(() => []);
   try {
     const validation = validateDish(req.body);
 
     if (!validation.success) {
-      const categories = await dishService.getCategories();
+      const locals = await buildFormLocals({
+        dish: req.body,
+        errors: validation.errors,
+        errorMessage: 'Vui lòng kiểm tra lại các trường thông tin bị lỗi.'
+      });
       return res.status(422).render('dishes/form', {
         pageTitle: 'Thêm Món Ăn Mới',
         currentPath: '/admin/dishes',
         isEdit: false,
-        dish: req.body,
         categories,
-        errors: validation.errors,
-        errorMessage: 'Vui lòng kiểm tra lại các trường thông tin bị lỗi.',
-        getImageUrl
+        getImageUrl,
+        ...locals
       });
     }
 
@@ -145,17 +170,22 @@ async function create(req, res, next) {
     res.redirect(303, '/admin/dishes?success=create');
   } catch (error) {
     console.error('[CREATE DISH CONTROLLER ERROR]:', error);
+    const errors = error.code === 'RELATION_VALIDATION' ? { relations: error.message } : {};
     try {
-      const categories = await dishService.getCategories();
-      return res.status(500).render('dishes/form', {
+      const locals = await buildFormLocals({
+        dish: req.body,
+        errors,
+        errorMessage: error.code === 'RELATION_VALIDATION'
+          ? error.message
+          : `Lỗi khi lưu món ăn: ${error.message}`
+      });
+      return res.status(error.code === 'RELATION_VALIDATION' ? 422 : 500).render('dishes/form', {
         pageTitle: 'Thêm Món Ăn Mới',
         currentPath: '/admin/dishes',
         isEdit: false,
-        dish: req.body,
         categories,
-        errors: {},
-        errorMessage: `Lỗi khi lưu món ăn: ${error.message}`,
-        getImageUrl
+        getImageUrl,
+        ...locals
       });
     } catch (e) {
       next(error);
@@ -180,14 +210,15 @@ async function renderEditForm(req, res, next) {
       });
     }
 
+    const locals = await buildFormLocals({ dish, errors: {} });
+
     res.render('dishes/form', {
       pageTitle: `Chỉnh Sửa: ${dish.name}`,
       currentPath: '/admin/dishes',
       isEdit: true,
-      dish,
       categories,
-      errors: {},
-      getImageUrl
+      getImageUrl,
+      ...locals
     });
   } catch (error) {
     next(error);
@@ -198,26 +229,28 @@ async function renderEditForm(req, res, next) {
  * 5. Submit Update Action (PRG with PATCH via method-override)
  */
 async function update(req, res, next) {
+  const categories = await dishService.getCategories().catch(() => []);
   try {
     const validation = validateDish(req.body);
 
     if (!validation.success) {
       const existing = await dishService.getDishById(req.params.id);
-      const categories = await dishService.getCategories();
-
-      return res.status(422).render('dishes/form', {
-        pageTitle: `Chỉnh Sửa: ${req.body.name || 'Món Ăn'}`,
-        currentPath: '/admin/dishes',
-        isEdit: true,
+      const locals = await buildFormLocals({
         dish: {
           ...req.body,
           id: req.params.id,
           imagePath: existing ? existing.imagePath : null
         },
-        categories,
         errors: validation.errors,
-        errorMessage: 'Vui lòng kiểm tra lại các trường thông tin bị lỗi.',
-        getImageUrl
+        errorMessage: 'Vui lòng kiểm tra lại các trường thông tin bị lỗi.'
+      });
+      return res.status(422).render('dishes/form', {
+        pageTitle: `Chỉnh Sửa: ${req.body.name || 'Món Ăn'}`,
+        currentPath: '/admin/dishes',
+        isEdit: true,
+        categories,
+        getImageUrl,
+        ...locals
       });
     }
 
@@ -228,20 +261,23 @@ async function update(req, res, next) {
     console.error('[UPDATE DISH CONTROLLER ERROR]:', error);
     try {
       const existing = await dishService.getDishById(req.params.id);
-      const categories = await dishService.getCategories();
-      return res.status(500).render('dishes/form', {
-        pageTitle: `Chỉnh Sửa: ${req.body.name || 'Món Ăn'}`,
-        currentPath: '/admin/dishes',
-        isEdit: true,
+      const isRelationError = error.code === 'RELATION_VALIDATION';
+      const locals = await buildFormLocals({
         dish: {
           ...req.body,
           id: req.params.id,
           imagePath: existing ? existing.imagePath : null
         },
+        errors: isRelationError ? { relations: error.message } : {},
+        errorMessage: isRelationError ? error.message : `Lỗi khi cập nhật món ăn: ${error.message}`
+      });
+      return res.status(isRelationError ? 422 : 500).render('dishes/form', {
+        pageTitle: `Chỉnh Sửa: ${req.body.name || 'Món Ăn'}`,
+        currentPath: '/admin/dishes',
+        isEdit: true,
         categories,
-        errors: {},
-        errorMessage: `Lỗi khi cập nhật món ăn: ${error.message}`,
-        getImageUrl
+        getImageUrl,
+        ...locals
       });
     } catch (e) {
       next(error);

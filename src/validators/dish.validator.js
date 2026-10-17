@@ -1,5 +1,21 @@
 const { z } = require('zod');
 
+/**
+ * Normalise a value coming from an HTML form into a de-duplicated array of
+ * positive integer IDs. HTML checkboxes may be absent, a single string, or an
+ * array of strings, so all three shapes are handled safely.
+ */
+function normalizeIdList(value) {
+  if (value === undefined || value === null || value === '') return [];
+  const arr = Array.isArray(value) ? value : [value];
+  const ids = arr
+    .map((v) => Number(v))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  return Array.from(new Set(ids));
+}
+
+const idListSchema = z.preprocess(normalizeIdList, z.array(z.number().int().positive()));
+
 const dishSchema = z.object({
   name: z.string({ required_error: 'Tên món ăn là bắt buộc' })
     .trim()
@@ -16,6 +32,14 @@ const dishSchema = z.object({
   description: z.string().trim().optional().or(z.literal('')),
   isFeatured: z.preprocess(
     (val) => val === 'true' || val === 'on' || val === true || val === 1 || val === '1',
+    z.boolean().default(false)
+  ),
+  // Relations are OPTIONAL. Empty selection is valid and means "no relations".
+  ingredientIds: idListSchema,
+  chefIds: idListSchema,
+  // Marker proving the relation fields were actually part of the submitted form.
+  relationsSubmitted: z.preprocess(
+    (val) => val === 'true' || val === '1' || val === 'on' || val === true || val === 1,
     z.boolean().default(false)
   )
 });
@@ -42,5 +66,6 @@ function validateDish(data) {
 
 module.exports = {
   dishSchema,
-  validateDish
+  validateDish,
+  normalizeIdList
 };

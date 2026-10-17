@@ -19,6 +19,10 @@ model Dish {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Many-to-many relations. Optional: a Dish may have zero ingredients/chefs.
+  ingredients DishIngredient[]
+  chefs       DishChef[]
+
   @@index([category])
   @@index([price])
   @@index([createdAt])
@@ -35,6 +39,9 @@ model Chef {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Dishes this chef is able to cook (many-to-many, optional).
+  dishes DishChef[]
+
   @@index([createdAt])
 }
 
@@ -48,6 +55,39 @@ model Ingredient {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Dishes that use this ingredient (many-to-many, optional).
+  dishes DishIngredient[]
+
   @@index([category])
   @@index([createdAt])
+}
+
+// Explicit join model: Dish <-> Ingredient
+model DishIngredient {
+  id           Int        @id @default(autoincrement())
+  dishId       Int
+  ingredientId Int
+  createdAt    DateTime   @default(now())
+
+  dish       Dish       @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([dishId, ingredientId])
+  @@index([dishId])
+  @@index([ingredientId])
+}
+
+// Explicit join model: Dish <-> Chef
+model DishChef {
+  id        Int      @id @default(autoincrement())
+  dishId    Int
+  chefId    Int
+  createdAt DateTime @default(now())
+
+  dish Dish @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  chef Chef @relation(fields: [chefId], references: [id], onDelete: Restrict)
+
+  @@unique([dishId, chefId])
+  @@index([dishId])
+  @@index([chefId])
 }

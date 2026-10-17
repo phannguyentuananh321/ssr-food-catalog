@@ -68,4 +68,33 @@
     </div>
 
   </div>
+
+  <!-- Dishes this chef can cook (from PostgreSQL) -->
+  <section class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-6 sm:p-8 shadow-xs mt-8">
+    <h2 class="font-serif text-xl font-bold text-[#292820] mb-4 flex items-center gap-2">
+      🍽 Món Ăn Có Thể Chế Biến
+      <span class="text-xs font-sans font-semibold text-[#7A7062]">(<%= chef.dishes.length %>)</span>
+    </h2>
+    <% if (chef.dishes.length > 0) { %>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <% chef.dishes.forEach(row => { const dish = row.dish; %>
+          <a href="/dishes/<%= dish.id %>" class="group bg-[#FAF5EC] border border-[#E9E0D2] rounded-2xl overflow-hidden hover:border-[#354B35] transition-colors">
+            <div class="aspect-4-3 overflow-hidden bg-[#E9E0D2]">
+              <img src="<%= getImageUrl(dish.imagePath) %>" alt="<%= dish.name %>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='/images/placeholder.svg'" />
+            </div>
+            <div class="p-4">
+              <h3 class="font-bold text-sm text-[#292820] line-clamp-2 min-h-[2.5rem]"><%= dish.name %></h3>
+              <div class="mt-1 font-bold text-[#354B35] text-sm">
+                <%= dish.price ? Number(dish.price).toLocaleString('vi-VN') + ' ₫' : 'Liên hệ' %>
+              </div>
+            </div>
+          </a>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <p class="text-sm text-[#7A7062] py-6 text-center bg-[#FAF5EC] rounded-2xl border border-dashed border-[#E9E0D2]">
+        Đầu bếp này chưa được gán vào món ăn nào.
+      </p>
+    <% } %>
+  </section>
 </div>

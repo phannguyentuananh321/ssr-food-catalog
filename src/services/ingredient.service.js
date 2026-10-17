@@ -23,7 +23,10 @@ async function getIngredients({ q, category, page = 1, limit = 9 }) {
       where,
       orderBy: { createdAt: 'desc' },
       skip,
-      take
+      take,
+      include: {
+        _count: { select: { dishes: true } }
+      }
     })
   ]);
 
@@ -56,7 +59,13 @@ async function getIngredientById(id) {
   const numericId = parseInt(id, 10);
   if (isNaN(numericId)) return null;
   return prisma.ingredient.findUnique({
-    where: { id: numericId }
+    where: { id: numericId },
+    include: {
+      dishes: {
+        include: { dish: true },
+        orderBy: { dishId: 'asc' }
+      }
+    }
   });
 }
 
@@ -132,6 +141,13 @@ async function deleteIngredient(id) {
   const existing = await getIngredientById(id);
   if (!existing) {
     throw new Error('Nguyên liệu không tồn tại hoặc đã bị xóa.');
+  }
+
+  if (existing.dishes.length > 0) {
+    throw new Error(
+      `Không thể xóa nguyên liệu "${existing.name}" vì đang được dùng trong ${existing.dishes.length} món ăn. ` +
+      'Vui lòng gỡ liên kết với các món ăn trước.'
+    );
   }
 
   const deleted = await prisma.ingredient.delete({
