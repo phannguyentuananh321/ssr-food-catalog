@@ -20,7 +20,10 @@ async function getChefs({ q, page = 1, limit = 9 }) {
       where,
       orderBy: { createdAt: 'desc' },
       skip,
-      take
+      take,
+      include: {
+        _count: { select: { dishes: true } }
+      }
     })
   ]);
 
@@ -45,7 +48,13 @@ async function getChefById(id) {
   const numericId = parseInt(id, 10);
   if (isNaN(numericId)) return null;
   return prisma.chef.findUnique({
-    where: { id: numericId }
+    where: { id: numericId },
+    include: {
+      dishes: {
+        include: { dish: true },
+        orderBy: { dishId: 'asc' }
+      }
+    }
   });
 }
 
@@ -123,6 +132,13 @@ async function deleteChef(id) {
   const existingChef = await getChefById(id);
   if (!existingChef) {
     throw new Error('Đầu bếp không tồn tại hoặc đã bị xóa.');
+  }
+
+  if (existingChef.dishes.length > 0) {
+    throw new Error(
+      `Không thể xóa đầu bếp "${existingChef.name}" vì đang phụ trách ${existingChef.dishes.length} món ăn. ` +
+      'Vui lòng gỡ liên kết với các món ăn trước.'
+    );
   }
 
   const deleted = await prisma.chef.delete({

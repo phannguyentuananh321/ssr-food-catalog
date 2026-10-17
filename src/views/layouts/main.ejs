@@ -12,6 +12,9 @@
   
   <!-- Compiled Tailwind CSS & DaisyUI -->
   <link rel="stylesheet" href="/css/output.css">
+
+  <!-- Page-level styles extracted from views (extractStyles is enabled) -->
+  <%- style %>
 </head>
 <body class="bg-[#FAF5EC] text-[#292820] font-sans antialiased min-h-screen flex flex-col selection:bg-[#354B35] selection:text-[#FFFDF8]">
 
@@ -51,5 +54,10 @@
       }
     }
   </script>
+
+  <!-- Page-level scripts extracted from views (extractScripts is enabled).
+       Without this placeholder, inline scripts defined inside page templates
+       (e.g. the delete-confirmation modal handlers) are silently dropped. -->
+  <%- script %>
 </body>
 </html>

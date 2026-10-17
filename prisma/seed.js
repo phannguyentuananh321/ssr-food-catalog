@@ -1,85 +1,136 @@
+/**
+ * Optional DEMO data seeder.
+ *
+ * Safety rules (see docs/implementation/MASTER_SPEC.md):
+ *   - This seeder NEVER deletes business data.
+ *   - It is IDEMPOTENT: running it multiple times does not create duplicates.
+ *   - It only runs when explicitly opted-in, via EITHER:
+ *         node prisma/seed.js --demo
+ *         SEED_DEMO=true node prisma/seed.js
+ *   - It refuses to run when NODE_ENV=production.
+ *   - Demo records are only meant for development/demo environments; production
+ *     data must be managed through the admin UI backed by PostgreSQL.
+ */
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Chỉ giữ lại những món ăn có ảnh thực tế trong Supabase Storage bucket `dish-images`
-const supabaseDishes = [
+const DEMO_INGREDIENTS = [
+  { name: 'Bánh phở tươi', category: 'Nông sản', unit: 'gram', description: 'Sợi phở dẻo mềm làm từ gạo tẻ.' },
+  { name: 'Thịt bò tái', category: 'Thịt & Hải sản', unit: 'gram', description: 'Thịt bò thăn thái lát mỏng.' },
+  { name: 'Hành lá', category: 'Rau thơm', unit: 'bó', description: 'Hành lá tươi thơm.' },
+  { name: 'Nước dùng xương', category: 'Gia vị truyền thống', unit: 'lít', description: 'Nước dùng ninh từ xương ống.' }
+];
+
+const DEMO_CHEFS = [
+  { name: 'Bếp Trưởng Minh', title: 'Bếp trưởng', experience: '15 năm kinh nghiệm', description: 'Chuyên ẩm thực Việt truyền thống.' },
+  { name: 'Đầu Bếp Lan', title: 'Sous Chef', experience: '8 năm kinh nghiệm', description: 'Phụ trách món nước và món cuốn.' }
+];
+
+const DEMO_DISHES = [
   {
-    name: 'Bò Wagyu Nướng Sốt Tiêu',
+    name: 'Phở Bò Tái Lăn',
+    category: 'Món nước',
+    price: 65000,
+    description: 'Nước dùng thanh ngọt, bánh phở mềm, thịt bò tái lăn thơm.',
+    isFeatured: true,
+    ingredients: ['Bánh phở tươi', 'Thịt bò tái', 'Hành lá', 'Nước dùng xương'],
+    chefs: ['Bếp Trưởng Minh', 'Đầu Bếp Lan']
+  },
+  {
+    name: 'Bún Chả Hà Nội',
     category: 'Món nướng',
-    price: 250000,
-    isFeatured: true,
-    imagePath: 'beef.jpg',
-    description: 'Thịt bò hảo hạng nướng xém cạnh mềm mọng, đượm sốt tiêu đen thơm lừng đậm đà.'
+    price: 55000,
+    description: 'Chả nướng than hoa ăn kèm bún và rau sống.',
+    isFeatured: false,
+    ingredients: ['Hành lá'],
+    chefs: ['Bếp Trưởng Minh']
   },
   {
-    name: 'Cua Tuyết Sốt Bơ Tỏi',
-    category: 'Hải sản',
-    price: 320000,
-    isFeatured: true,
-    imagePath: 'crab.jpg',
-    description: 'Cua tươi ngon chắc thịt xào cùng bơ lạt Pháp và tỏi phi thơm nức mũi.'
-  },
-  {
-    name: 'Matcha Latte Sữa Tươi Kem Béo',
+    name: 'Trà Sen Ướp Hương',
     category: 'Đồ uống',
-    price: 45000,
-    isFeatured: true,
-    imagePath: 'mattcha.jpg',
-    description: 'Bột matcha thượng hạng hòa quyện sữa tươi thanh trùng và lớp bọt kem béo ngậy ngọt dịu.'
-  },
-  {
-    name: 'Sashimi Cá Hồi Tươi Thượng Hạng',
-    category: 'Món tươi sống',
-    price: 185000,
-    isFeatured: true,
-    imagePath: 'sashimi.jpg',
-    description: 'Từng lát cá hồi tươi béo ngậy cắt lát dày vừa vặn, ăn kèm wasabi cay nồng và lá tía tô.'
-  },
-  {
-    name: 'Sushi Thập Cẩm Nghệ Nhân',
-    category: 'Món chính',
-    price: 160000,
-    isFeatured: true,
-    imagePath: 'sushi.jpg',
-    description: 'Cơm giấm dẻo thơm kết hợp các loại hải sản tươi sống chọn lọc tạo nên hương vị nguyên bản tinh tế.'
+    price: 30000,
+    description: 'Trà ướp hương sen thanh mát.',
+    isFeatured: false,
+    ingredients: [],
+    chefs: []
   }
 ];
 
+async function upsertByName(model, data) {
+  const existing = await prisma[model].findFirst({ where: { name: data.name } });
+  if (existing) {
+    const updated = await prisma[model].update({ where: { id: existing.id }, data });
+    console.log(`[=] Updated ${model}: ${data.name}`);
+    return updated;
+  }
+  const created = await prisma[model].create({ data });
+  console.log(`[+] Created ${model}: ${data.name}`);
+  return created;
+}
+
 async function main() {
-  console.log('--- Đồng bộ chỉ dữ liệu có trong Supabase Storage ---');
+  const optIn = process.argv.includes('--demo') || ['1', 'true', 'yes'].includes(String(process.env.SEED_DEMO).toLowerCase());
 
-  // Xóa các món không có ảnh trong Supabase
-  const supabaseImageFiles = supabaseDishes.map(d => d.imagePath);
-  await prisma.dish.deleteMany({
-    where: {
-      imagePath: {
-        notIn: supabaseImageFiles
-      }
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[SEED REFUSED] NODE_ENV=production. Demo seeding is disabled in production.');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!optIn) {
+    console.log('--- Demo seed skipped ---');
+    console.log('This seeder is OPT-IN and never runs automatically.');
+    console.log('To insert demo data into a development database, run one of:');
+    console.log('  node prisma/seed.js --demo');
+    console.log('  SEED_DEMO=true node prisma/seed.js');
+    return;
+  }
+
+  console.log('--- Seeding DEMO data (idempotent, non-destructive) ---');
+
+  // 1. Ingredients
+  const ingredientByName = new Map();
+  for (const ingredient of DEMO_INGREDIENTS) {
+    const row = await upsertByName('ingredient', ingredient);
+    ingredientByName.set(row.name, row.id);
+  }
+
+  // 2. Chefs
+  const chefByName = new Map();
+  for (const chef of DEMO_CHEFS) {
+    const row = await upsertByName('chef', chef);
+    chefByName.set(row.name, row.id);
+  }
+
+  // 3. Dishes + relations
+  for (const dish of DEMO_DISHES) {
+    const { ingredients, chefs, ...dishData } = dish;
+    const row = await upsertByName('dish', { ...dishData, imagePath: null });
+
+    const ingredientRows = ingredients
+      .map((name) => ingredientByName.get(name))
+      .filter(Boolean)
+      .map((ingredientId) => ({ dishId: row.id, ingredientId }));
+    const chefRows = chefs
+      .map((name) => chefByName.get(name))
+      .filter(Boolean)
+      .map((chefId) => ({ dishId: row.id, chefId }));
+
+    if (ingredientRows.length) {
+      await prisma.dishIngredient.createMany({ data: ingredientRows, skipDuplicates: true });
     }
-  });
-
-  // Cập nhật hoặc tạo mới 5 món từ Supabase
-  for (const dish of supabaseDishes) {
-    const existing = await prisma.dish.findFirst({ where: { imagePath: dish.imagePath } });
-    if (!existing) {
-      await prisma.dish.create({ data: dish });
-      console.log(`[+] Đã tạo món ăn: ${dish.name} (${dish.imagePath})`);
-    } else {
-      await prisma.dish.update({
-        where: { id: existing.id },
-        data: dish
-      });
-      console.log(`[✓] Đã cập nhật món ăn: ${dish.name} (${dish.imagePath})`);
+    if (chefRows.length) {
+      await prisma.dishChef.createMany({ data: chefRows, skipDuplicates: true });
     }
   }
 
-  console.log('--- Hoàn tất! Hiện tại toàn bộ dữ liệu 100% là ảnh từ Supabase Storage. ---');
+  console.log('--- Demo seed complete (no existing data was deleted). ---');
 }
 
 main()
   .catch((e) => {
     console.error('[SEED ERROR]:', e);
-    process.exit(1);
+    process.exitCode = 1;
   })
   .finally(async () => {
     await prisma.$disconnect();

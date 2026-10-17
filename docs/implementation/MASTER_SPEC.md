@@ -14,6 +14,7 @@ Giao diện áp dụng ngôn ngữ thiết kế **Warm Cream — Modern Food Edi
    - `imagePath`: String (Đường dẫn tương đối trong Supabase Storage bucket `dish-images` hoặc URL fallback)
    - `isFeatured`: Boolean (Dùng cho Hero Slider / Món nổi bật)
    - `createdAt`, `updatedAt`: DateTime
+   - **Quan hệ (nhiều-nhiều, tùy chọn)**: `ingredients` (Dish ↔ Ingredient), `chefs` (Dish ↔ Chef). Một Dish có thể có 0..n nguyên liệu và 0..n đầu bếp; không bắt buộc phải có.
 
 2. **Chef (Đầu bếp)**
    - `id`: Int / UUID
@@ -23,6 +24,7 @@ Giao diện áp dụng ngôn ngữ thiết kế **Warm Cream — Modern Food Edi
    - `experience`: String / Int (vd: "15 năm kinh nghiệm", "Master Chef")
    - `imagePath`: String (Ảnh đại diện trong bucket)
    - `createdAt`, `updatedAt`: DateTime
+   - **Quan hệ**: `dishes` — danh sách món ăn đầu bếp có thể chế biến (lấy từ bảng nối `DishChef`, không hard-code).
 
 3. **Ingredient (Nguyên liệu)**
    - `id`: Int / UUID
@@ -32,6 +34,7 @@ Giao diện áp dụng ngôn ngữ thiết kế **Warm Cream — Modern Food Edi
    - `unit`: String (vd: gram, kg, bó, muỗng)
    - `imagePath`: String (Ảnh minh họa)
    - `createdAt`, `updatedAt`: DateTime
+   - **Quan hệ**: `dishes` — danh sách món ăn sử dụng nguyên liệu (lấy từ bảng nối `DishIngredient`, không hard-code).
 
 ## 3. Hệ thống 15 Trang cốt lõi (3 thực thể x 5 trang)
 - **Dish**:
@@ -92,3 +95,47 @@ Trang hỗ trợ:
 - Tất cả cấu hình tập trung trong `.env`, nạp qua `src/config/env.js`.
 - Báo rõ biến bắt buộc nếu thiếu mà không in lộ giá trị.
 - Không đưa secret ra client hay commit vào Git.
+
+## 8. Quan hệ Nhiều-Nhiều (Cập nhật kiến trúc)
+Hai bảng nối tường minh (explicit join models):
+- `DishIngredient`: `id`, `dishId`, `ingredientId`, `createdAt`. Unique `(dishId, ingredientId)`, index trên từng khóa ngoại.
+- `DishChef`: `id`, `dishId`, `chefId`, `createdAt`. Unique `(dishId, chefId)`, index trên từng khóa ngoại.
+
+Quy tắc:
+- Một Dish có nhiều Ingredient; một Ingredient dùng trong nhiều Dish.
+- Một Dish có nhiều Chef; một Chef nấu nhiều Dish.
+- Quan hệ hoạt động hai chiều qua truy vấn Prisma (`include`), không lưu CSV/JSON trong Dish.
+- **Quan hệ là tùy chọn.** Dish được phép không có Ingredient và/hoặc không có Chef. Form create/edit validate các ID (phải tồn tại) nhưng không bắt buộc chọn.
+
+## 9. Quy Tắc Xóa
+- Xóa Dish: `DishIngredient.dishId` và `DishChef.dishId` dùng `ON DELETE CASCADE` → chỉ xóa dòng nối của Dish đó. Không xóa Chef/Ingredient.
+- Xóa Chef/Ingredient: FK từ bảng nối dùng `ON DELETE RESTRICT` + guard ở service → chặn xóa khi còn được Dish sử dụng, kèm thông báo dễ hiểu.
+- DELETE qua `method-override` (hidden `_method=DELETE`), redirect `303`. GET không thay đổi dữ liệu.
+- Nút xóa dùng modal xác nhận; script modal nằm trong view trang và phải được layout render (xem mục 12).
+
+## 10. Migration & Bảo Toàn Dữ Liệu
+- Database được quản lý bằng **Prisma Migrate**; baseline `20260101000000_init` mô tả schema đã tồn tại (đánh dấu applied, không chạy lại).
+- Migration `20261017000000_add_dish_chef_ingredient_relations` chỉ THÊM bảng/index/FK.
+- Không dùng `migrate reset`, `db push --accept-data-loss`, không drop bảng để né migration.
+- Áp dụng: `npm run prisma:migrate:deploy` (hoặc `npx prisma migrate deploy`).
+
+## 11. Chính Sách Seed
+- `prisma/seed.js` là seeder demo **tùy chọn (opt-in)**, **idempotent**, **không xóa dữ liệu**.
+- Chỉ chạy khi có cờ `--demo` hoặc `SEED_DEMO=true`; từ chối chạy khi `NODE_ENV=production`.
+- Không tự chạy khi ứng dụng khởi động. Không dùng mảng JS/JSON làm nguồn dữ liệu production.
+- Script `prisma/sync-supabase.js` (chứa dữ liệu hard-code và xóa dữ liệu thật) đã được **loại bỏ**.
+
+## 12. Nguồn Dữ Liệu & Giao Diện
+- Nguồn dữ liệu nghiệp vụ duy nhất: PostgreSQL trên Supabase (qua Prisma). Không fallback mock.
+- Trang chi tiết Dish hiển thị Ingredient + Chef (thông báo thân thiện khi trống). Trang chi tiết Chef/Ingredient hiển thị danh sách Dish liên quan.
+- Trang admin Dish hiển thị số nguyên liệu/đầu bếp; admin Chef/Ingredient hiển thị số món.
+- `layout extractScripts`/`extractStyles` = true, do đó `layouts/main.ejs` BẮT BUỘC có `<%- script %>` và `<%- style %>`, nếu không script của trang (modal xóa) sẽ bị loại bỏ.
+
+## 13. Biến Môi Trường (cập nhật)
+- Bổ sung `SEED_DEMO` (tùy chọn) cho seed demo. Các biến khác giữ nguyên như mục 7.
+- `imagePath` lưu đường dẫn tương đối trong bucket `dish-images`; URL công khai sinh từ bucket + path.
+
+## 14. Kiểm Thử & Giới Hạn Đã Biết
+- `npm test`: test đơn vị (validator, chuẩn hoá ID, quan hệ tùy chọn, regression script layout).
+- `RUN_DB_TESTS=1 npm test`: test tích hợp trên PostgreSQL (CRUD, M:N hai chiều, chặn xóa, cascade dòng nối).
+- Giới hạn đã biết: route `/admin` chưa có xác thực — ngoài phạm vi bản refactor này, cần xử lý riêng trước khi public ghi dữ liệu ở production.

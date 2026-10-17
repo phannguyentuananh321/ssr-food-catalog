@@ -53,6 +53,7 @@ Tất cả cấu hình môi trường được quản lý tại file `.env` ở 
 | `SUPABASE_URL` | Endpoint dự án Supabase | **Bắt buộc cho Storage** | Lấy từ **Supabase Dashboard** -> Project Settings -> API -> Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Secret Key phía Server | **Bắt buộc cho Storage** | Lấy từ **Supabase Dashboard** -> Project Settings -> API -> `service_role` (Secret) |
 | `SUPABASE_STORAGE_BUCKET` | Tên bucket lưu ảnh | Tùy chọn | Tên bucket trong Supabase Storage (mặc định: `dish-images`) |
+| `SEED_DEMO` | Bật seed dữ liệu demo | Tùy chọn | Chỉ dùng cho môi trường demo/dev. Ví dụ `SEED_DEMO=true`. Không dùng ở production |
 | `SESSION_SECRET` | Khóa mã hóa phiên | Tùy chọn | Chuỗi ngẫu nhiên bảo mật (tối thiểu 32 ký tự) |
 
 ---
@@ -70,21 +71,30 @@ Sao chép `.env.example` thành `.env` và điền connection string PostgreSQL 
 cp .env.example .env
 ```
 
-### Bước 3: Đồng bộ Database & Sinh Prisma Client
-Nếu kết nối trực tiếp đến PostgreSQL:
+### Bước 3: Quản Lý Schema Database (Prisma Migrate) & Sinh Prisma Client
+Database được quản lý bằng **Prisma Migrate**. Áp dụng migration lên database hiện có (an toàn, không xóa dữ liệu):
 ```bash
-# Đẩy schema lên database
-npm run prisma:push
+# Áp dụng các migration đang chờ (không reset, không mất dữ liệu)
+npm run prisma:migrate:deploy
 
-# Hoặc chạy migration
-npm run prisma:migrate
+# Kiểm tra trạng thái migration
+npm run prisma:migrate:status
+
+# Sinh Prisma Client sau khi đổi schema
+npm run prisma:generate
 ```
+> Không dùng `prisma migrate reset` hay `db push --accept-data-loss` trên database có dữ liệu thật.
 
-### Bước 4: Nạp Dữ Liệu Mẫu (Seed Data)
-Nạp dữ liệu phong phú gồm các món ăn Việt Nam truyền thống, danh sách đầu bếp và nguyên liệu:
+### Bước 4: Nạp Dữ Liệu Mẫu (TÙY CHỌN — chỉ cho môi trường demo)
+Seeder là **tùy chọn (opt-in)**, **idempotent** và **không bao giờ xóa dữ liệu** thật. Mặc định `npm run prisma:seed` sẽ KHÔNG ghi gì nếu chưa bật:
 ```bash
-npm run prisma:seed
+# Cách 1: truyền cờ --demo
+npm run prisma:seed:demo
+
+# Cách 2: bật biến môi trường (macOS/Linux)
+SEED_DEMO=true npm run prisma:seed
 ```
+Seeder tự từ chối chạy khi `NODE_ENV=production`. Dữ liệu nghiệp vụ thật phải được quản lý qua giao diện quản trị và lưu trong PostgreSQL.
 
 ### Bước 5: Biên dịch CSS (Tailwind CLI & DaisyUI)
 ```bash
@@ -119,3 +129,46 @@ npm test
 - `PATCH`: Cập nhật tài nguyên (gửi qua HTML Form sử dụng `method-override` với trường ẩn `_method=PATCH`).
 - `DELETE`: Xóa tài nguyên (gửi qua HTML Form sử dụng `method-override` với trường ẩn `_method=DELETE`).
 - Sau mỗi thao tác ghi dữ liệu thành công, server thực hiện `303 See Other Redirect` kèm query status để chống submit trùng lặp khi người dùng refresh trình duyệt.
+
+---
+
+## 6. Mô Hình Dữ Liệu & Quan Hệ
+
+Nguồn dữ liệu nghiệp vụ duy nhất là **PostgreSQL (Supabase)** thông qua Prisma. Supabase Storage chỉ lưu file ảnh.
+
+- **Dish ↔ Ingredient**: quan hệ nhiều-nhiều qua bảng nối tường minh `DishIngredient` (`dishId`, `ingredientId`, unique cặp khóa).
+- **Dish ↔ Chef**: quan hệ nhiều-nhiều qua bảng nối tường minh `DishChef` (`dishId`, `chefId`, unique cặp khóa).
+- Quan hệ là **tùy chọn**: một món ăn có thể có 0..n nguyên liệu và 0..n đầu bếp. Trang chi tiết hiển thị thông báo thân thiện khi chưa có dữ liệu quan hệ.
+- Trang chi tiết Chef và Ingredient liệt kê các món ăn liên quan, truy vấn trực tiếp từ database (không hard-code).
+- Không lưu danh sách nguyên liệu/đầu bếp dưới dạng CSV/JSON trong bảng `Dish`.
+
+### Quy Tắc Xóa
+- Xóa **Dish**: chỉ xóa bản ghi Dish và các dòng nối của chính nó (`ON DELETE CASCADE` trên bảng nối). **Không** xóa Chef/Ingredient.
+- Xóa **Chef/Ingredient** đang được món ăn sử dụng: **bị chặn** ở cả tầng ứng dụng (thông báo rõ ràng) và database (`ON DELETE RESTRICT`). Gỡ liên kết khỏi Dish trước khi xóa.
+- Xóa luôn dùng phương thức `DELETE` (qua `method-override`) và redirect `303`; `GET` không bao giờ thay đổi dữ liệu.
+
+### Ảnh & imagePath
+- `imagePath` chỉ lưu **đường dẫn tương đối** trong bucket `dish-images` (ví dụ `dishes/<tên file>.jpg`). URL công khai được tạo từ bucket + relative path.
+- Upload dùng Multer `memoryStorage`, chỉ nhận `image/jpeg`, `image/png`, `image/webp`, tối đa 5MB. Nếu DB ghi thất bại sau khi upload, file vừa upload được dọn; ảnh cũ chỉ bị xóa sau khi DB cập nhật thành công.
+
+---
+
+## 7. Kiểm Thử
+
+```bash
+# Test đơn vị (không cần database)
+npm test
+
+# Test tích hợp trên database thật (tạo rồi tự dọn dẹp dữ liệu test)
+# macOS/Linux:
+RUN_DB_TESTS=1 npm test
+```
+
+Bộ test bao gồm: validator Zod, chuẩn hoá danh sách ID quan hệ, xử lý quan hệ tùy chọn (Dish không có Chef/Ingredient), và các test tích hợp CRUD + quan hệ + quy tắc xóa chạy trên PostgreSQL.
+
+---
+
+## 8. Lưu Ý Bảo Mật (Đã Biết)
+
+- Các route `/admin` hiện **chưa có xác thực**; không nên public ghi dữ liệu ở production. Đây là hạng mục ngoài phạm vi bản refactor này và được ghi nhận để xử lý riêng.
+- Không commit `.env`; secret chỉ nằm trong biến môi trường của nền tảng triển khai.

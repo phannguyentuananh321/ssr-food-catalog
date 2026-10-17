@@ -74,4 +74,69 @@
     </div>
 
   </div>
+
+  <!-- Relations: Ingredients & Chefs (fetched from PostgreSQL) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+    <!-- Ingredients -->
+    <section class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-6 sm:p-8 shadow-xs">
+      <h2 class="font-serif text-xl font-bold text-[#292820] mb-4 flex items-center gap-2">
+        🥬 Nguyên Liệu
+        <span class="text-xs font-sans font-semibold text-[#7A7062]">(<%= dish.ingredients.length %>)</span>
+      </h2>
+      <% if (dish.ingredients.length > 0) { %>
+        <ul class="space-y-3">
+          <% dish.ingredients.forEach(row => { const ing = row.ingredient; %>
+            <li class="flex items-center gap-4 p-3 rounded-2xl bg-[#FAF5EC] border border-[#E9E0D2]">
+              <span class="w-12 aspect-4-3 rounded-lg overflow-hidden bg-[#E9E0D2] shrink-0">
+                <img src="<%= getImageUrl(ing.imagePath) %>" alt="<%= ing.name %>" class="w-full h-full object-cover" onerror="this.src='/images/placeholder.svg'" />
+              </span>
+              <span class="min-w-0">
+                <a href="/ingredients/<%= ing.id %>" class="block font-bold text-sm text-[#292820] hover:text-[#354B35] truncate">
+                  <%= ing.name %>
+                </a>
+                <span class="block text-xs text-[#7A7062] truncate">
+                  <%= ing.category || 'Nguyên liệu' %><%= ing.unit ? ' • ' + ing.unit : '' %>
+                </span>
+              </span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="text-sm text-[#7A7062] py-6 text-center bg-[#FAF5EC] rounded-2xl border border-dashed border-[#E9E0D2]">
+          Chưa cập nhật nguyên liệu cho món ăn này.
+        </p>
+      <% } %>
+    </section>
+
+    <!-- Chefs -->
+    <section class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-6 sm:p-8 shadow-xs">
+      <h2 class="font-serif text-xl font-bold text-[#292820] mb-4 flex items-center gap-2">
+        👨‍🍳 Đầu Bếp Có Thể Chế Biến
+        <span class="text-xs font-sans font-semibold text-[#7A7062]">(<%= dish.chefs.length %>)</span>
+      </h2>
+      <% if (dish.chefs.length > 0) { %>
+        <ul class="space-y-3">
+          <% dish.chefs.forEach(row => { const chef = row.chef; %>
+            <li class="flex items-center gap-4 p-3 rounded-2xl bg-[#FAF5EC] border border-[#E9E0D2]">
+              <span class="w-12 aspect-4-3 rounded-lg overflow-hidden bg-[#E9E0D2] shrink-0">
+                <img src="<%= getImageUrl(chef.imagePath) %>" alt="<%= chef.name %>" class="w-full h-full object-cover" onerror="this.src='/images/placeholder.svg'" />
+              </span>
+              <span class="min-w-0">
+                <a href="/chefs/<%= chef.id %>" class="block font-bold text-sm text-[#292820] hover:text-[#354B35] truncate">
+                  <%= chef.name %>
+                </a>
+                <span class="block text-xs text-[#7A7062] truncate">
+                  <%= chef.title || 'Đầu bếp' %><%= chef.experience ? ' • ' + chef.experience : '' %>
+                </span>
+              </span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="text-sm text-[#7A7062] py-6 text-center bg-[#FAF5EC] rounded-2xl border border-dashed border-[#E9E0D2]">
+          Chưa cập nhật đầu bếp cho món ăn này.
+        </p>
+      <% } %>
+    </section>
+  </div>
 </div>

@@ -65,6 +65,7 @@
             <th class="py-4 px-6">Tên Nguyên Liệu & ID</th>
             <th class="py-4 px-6">Phân Loại</th>
             <th class="py-4 px-6">Đơn Vị Tính</th>
+            <th class="py-4 px-6">Số Món</th>
             <th class="py-4 px-6">Cập Nhật</th>
             <th class="py-4 px-6 text-right w-40">Thao Tác</th>
           </tr>
@@ -99,6 +100,11 @@
                 <td class="py-3 px-6 text-[#7A7062]">
                   <%= ing.unit || '—' %>
                 </td>
+                <td class="py-3 px-6">
+                  <span class="badge bg-[#FAF5EC] text-[#354B35] border border-[#E9E0D2] text-xs font-medium">
+                    🍽 <%= ing._count ? ing._count.dishes : 0 %> món
+                  </span>
+                </td>
                 <td class="py-3 px-6 text-xs text-[#7A7062]">
                   <%= new Date(ing.updatedAt).toLocaleDateString('vi-VN') %>
                 </td>
@@ -119,7 +125,7 @@
             <% }) %>
           <% } else { %>
             <tr>
-              <td colspan="6" class="text-center py-12 text-[#7A7062]">
+              <td colspan="7" class="text-center py-12 text-[#7A7062]">
                 Chưa có nguyên liệu nào trong hệ thống.
               </td>
             </tr>
