@@ -1,0 +1,116 @@
+<!-- HERO SECTION FOR CHEFS -->
+<section class="relative bg-[#FAF5EC] border-b border-[#E9E0D2] overflow-hidden min-h-[380px] flex items-center">
+  <div id="vanta-hero-canvas"></div>
+  <div class="hero-content-wrapper max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full text-center">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#354B35]/10 border border-[#354B35]/20 text-[#354B35] text-xs font-semibold uppercase tracking-wider mb-4">
+      Bàn Tay Tài Hoa
+    </div>
+    <h1 class="font-serif text-4xl sm:text-5xl font-bold text-[#292820] mb-4">
+      Những Nghệ Nhân Ẩm Thực
+    </h1>
+    <p class="text-base sm:text-lg text-[#7A7062] max-w-2xl mx-auto leading-relaxed">
+      Gặp gỡ những đầu bếp tâm huyết, những người thổi hồn câu chuyện văn hóa vào từng hương vị tinh tế của Ấm Vị.
+    </p>
+  </div>
+</section>
+
+<!-- MAIN CHEFS GRID -->
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+  <!-- Search bar -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-4 mb-10 shadow-xs">
+    <form method="GET" action="/chefs" class="flex flex-col sm:flex-row items-center gap-4">
+      <div class="relative flex-grow w-full">
+        <input 
+          type="text" 
+          name="q" 
+          value="<%= typeof queryParams !== 'undefined' && queryParams.q ? queryParams.q : '' %>"
+          placeholder="Tìm kiếm theo tên đầu bếp..." 
+          class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+        />
+      </div>
+      <button type="submit" class="btn bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium px-6 w-full sm:w-auto">
+        Tìm Kiếm
+      </button>
+      <% if (typeof queryParams !== 'undefined' && queryParams.q) { %>
+        <a href="/chefs" class="btn bg-[#FAF5EC] text-[#7A7062] hover:bg-[#E9E0D2] border border-[#E9E0D2] rounded-xl font-medium w-full sm:w-auto">
+          Đặt lại
+        </a>
+      <% } %>
+    </form>
+  </div>
+
+  <!-- Cards Grid -->
+  <% if (chefs && chefs.length > 0) { %>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+      <% chefs.forEach(chef => { %>
+        <article class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group">
+          
+          <!-- Chef Portrait: 4:3 Ratio -->
+          <div class="w-full aspect-4-3 overflow-hidden bg-[#FAF5EC] relative">
+            <img 
+              src="<%= getImageUrl(chef.imagePath) %>" 
+              alt="<%= chef.name %>" 
+              loading="lazy"
+              class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              onerror="this.src='/images/placeholder.svg'"
+            />
+            <% if (chef.isFeatured) { %>
+              <span class="absolute top-3 left-3 bg-[#354B35] text-[#FFFDF8] text-[11px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-xs">
+                ★ Bếp trưởng tiêu biểu
+              </span>
+            <% } %>
+          </div>
+
+          <!-- Body -->
+          <div class="p-6 flex flex-col flex-grow justify-between">
+            <div class="space-y-2">
+              <span class="inline-block text-xs font-semibold text-[#B86F45] uppercase tracking-wider">
+                <%= chef.title || 'Nghệ nhân Ẩm thực' %>
+              </span>
+
+              <h3 class="font-serif text-xl font-bold text-[#292820] group-hover:text-[#354B35] transition-colors">
+                <a href="/chefs/<%= chef.id %>">
+                  <%= chef.name %>
+                </a>
+              </h3>
+
+              <% if (chef.experience) { %>
+                <div class="text-xs font-medium text-[#354B35] flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <%= chef.experience %>
+                </div>
+              <% } %>
+
+              <p class="text-sm text-[#7A7062] line-clamp-3 leading-relaxed mt-2">
+                <%= chef.description || 'Gắn bó với nghệ thuật nấu nướng và truyền tải linh hồn ẩm thực truyền thống Việt Nam.' %>
+              </p>
+            </div>
+
+            <div class="pt-5 mt-4 border-t border-[#E9E0D2]">
+              <a href="/chefs/<%= chef.id %>" class="btn btn-sm w-full bg-[#FAF5EC] hover:bg-[#354B35] text-[#354B35] hover:text-[#FFFDF8] border border-[#E9E0D2] rounded-xl font-medium transition-colors">
+                Xem Tiểu Sử & Triết Lý »
+              </a>
+            </div>
+          </div>
+
+        </article>
+      <% }) %>
+    </div>
+
+    <!-- Pagination -->
+    <%- include('../partials/pagination') %>
+
+  <% } else { %>
+    <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-12 text-center my-8">
+      <h3 class="font-serif text-xl font-bold text-[#292820] mb-2">Không Tìm Thấy Đầu Bếp</h3>
+      <p class="text-sm text-[#7A7062] max-w-md mx-auto mb-6">
+        Không có dữ liệu đầu bếp nào khớp với từ khóa tìm kiếm của bạn.
+      </p>
+      <a href="/chefs" class="btn btn-sm bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] border-none rounded-xl px-5">
+        Xem Tất Cả Đầu Bếp
+      </a>
+    </div>
+  <% } %>
+</div>

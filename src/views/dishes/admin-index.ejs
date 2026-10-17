@@ -1,0 +1,198 @@
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <!-- Top Admin Bar -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+    <div>
+      <span class="text-xs font-bold uppercase tracking-wider text-[#B86F45]">Hệ Thống Quản Trị</span>
+      <h1 class="font-serif text-3xl font-bold text-[#292820] mt-1">
+        Quản Lý Món Ăn
+      </h1>
+      <p class="text-sm text-[#7A7062] mt-1">
+        Tổng số <%= pagination.totalItems %> món ăn trong cơ sở dữ liệu
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/dishes" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#292820] border border-[#E9E0D2] rounded-xl font-medium">
+        👁 Xem Trang Công Khai
+      </a>
+      <a href="/admin/dishes/new" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium shadow-xs">
+        + Thêm Món Mới
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Category Filter for Admin -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-4 mb-6 shadow-xs">
+    <form method="GET" action="/admin/dishes" class="flex flex-col sm:flex-row items-center gap-3">
+      <div class="w-full sm:w-1/2">
+        <input 
+          type="text" 
+          name="q" 
+          value="<%= typeof queryParams !== 'undefined' && queryParams.q ? queryParams.q : '' %>"
+          placeholder="Tìm kiếm theo tên món..."
+          class="input input-bordered input-sm w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+        />
+      </div>
+      <div class="w-full sm:w-1/3">
+        <select name="category" class="select select-bordered select-sm w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm">
+          <option value="all">Tất cả danh mục</option>
+          <% if (categories && categories.length > 0) { %>
+            <% categories.forEach(cat => { %>
+              <option value="<%= cat %>" <%= typeof queryParams !== 'undefined' && queryParams.category === cat ? 'selected' : '' %>>
+                <%= cat %>
+              </option>
+            <% }) %>
+          <% } %>
+        </select>
+      </div>
+      <div class="w-full sm:w-auto flex gap-2">
+        <button type="submit" class="btn btn-sm bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] border-none rounded-xl px-4 font-medium">
+          Lọc
+        </button>
+        <a href="/admin/dishes" class="btn btn-sm bg-[#FAF5EC] text-[#7A7062] hover:bg-[#E9E0D2] border border-[#E9E0D2] rounded-xl font-medium">
+          Đặt lại
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- DATA TABLE — OPTION 2 -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl overflow-hidden shadow-xs">
+    <div class="overflow-x-auto">
+      <table class="table w-full">
+        <!-- Table Head -->
+        <thead class="bg-[#FAF5EC] border-b border-[#E9E0D2] text-xs font-bold uppercase tracking-wider text-[#7A7062]">
+          <tr>
+            <th class="py-4 px-6 w-24">Hình Ảnh</th>
+            <th class="py-4 px-6">Tên Món Ăn & ID</th>
+            <th class="py-4 px-6">Danh Mục</th>
+            <th class="py-4 px-6">Giá Niêm Yết</th>
+            <th class="py-4 px-6">Cập Nhật</th>
+            <th class="py-4 px-6 text-right w-40">Thao Tác</th>
+          </tr>
+        </thead>
+        
+        <!-- Table Body -->
+        <tbody class="divide-y divide-[#E9E0D2] text-sm">
+          <% if (dishes && dishes.length > 0) { %>
+            <% dishes.forEach(dish => { %>
+              <tr class="hover:bg-[#FAF5EC]/50 transition-colors">
+                <!-- 1. Thumbnail 4:3 Ratio -->
+                <td class="py-3 px-6">
+                  <div class="w-16 aspect-4-3 rounded-lg overflow-hidden bg-[#FAF5EC] border border-[#E9E0D2]">
+                    <img 
+                      src="<%= getImageUrl(dish.imagePath) %>" 
+                      alt="<%= dish.name %>" 
+                      class="w-full h-full object-cover"
+                      onerror="this.src='/images/placeholder.svg'"
+                    />
+                  </div>
+                </td>
+
+                <!-- 2. Name & ID -->
+                <td class="py-3 px-6">
+                  <div class="font-serif font-bold text-base text-[#292820]">
+                    <%= dish.name %>
+                  </div>
+                  <div class="text-xs text-[#7A7062] mt-0.5 flex items-center gap-2">
+                    <span>ID: #<%= dish.id %></span>
+                    <% if (dish.isFeatured) { %>
+                      <span class="inline-block px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#354B35] text-[#FFFDF8]">
+                        Tuyển chọn
+                      </span>
+                    <% } %>
+                  </div>
+                </td>
+
+                <!-- 3. Category -->
+                <td class="py-3 px-6">
+                  <span class="badge bg-[#FAF5EC] text-[#B86F45] border border-[#E9E0D2] text-xs font-medium">
+                    <%= dish.category %>
+                  </span>
+                </td>
+
+                <!-- 4. Price -->
+                <td class="py-3 px-6 font-bold text-[#354B35]">
+                  <%= dish.price ? Number(dish.price).toLocaleString('vi-VN') + ' ₫' : '0 ₫' %>
+                </td>
+
+                <!-- 5. Updated date -->
+                <td class="py-3 px-6 text-xs text-[#7A7062]">
+                  <%= new Date(dish.updatedAt).toLocaleDateString('vi-VN') %>
+                </td>
+
+                <!-- 6. Actions (Edit & Delete via Modal) -->
+                <td class="py-3 px-6 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <a href="/admin/dishes/<%= dish.id %>/edit" class="btn btn-xs bg-[#FAF5EC] hover:bg-[#354B35] hover:text-[#FFFDF8] text-[#354B35] border border-[#E9E0D2] rounded-lg font-medium">
+                      Sửa
+                    </a>
+                    <button 
+                      type="button" 
+                      onclick="openDeleteModal('<%= dish.id %>', '<%= dish.name.replace(/'/g, '\\\'') %>')"
+                      class="btn btn-xs bg-[#FAF5EC] hover:bg-[#B86F45] hover:text-[#FFFDF8] text-[#B86F45] border border-[#E9E0D2] rounded-lg font-medium">
+                      Xóa
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="6" class="text-center py-12 text-[#7A7062]">
+                Chưa có món ăn nào trong danh mục hoặc không tìm thấy kết quả phù hợp.
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Server Pagination -->
+    <div class="px-6">
+      <%- include('../partials/pagination') %>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL XÁC NHẬN XÓA (DELETE CONFIRMATION MODAL) -->
+<dialog id="deleteModal" class="modal modal-bottom sm:modal-middle">
+  <div class="modal-box bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-6 sm:p-8">
+    <h3 class="font-serif font-bold text-xl text-[#292820]">Xác Nhận Xóa Món Ăn</h3>
+    <p class="py-4 text-sm text-[#7A7062] leading-relaxed">
+      Bạn có chắc chắn muốn xóa món <span id="modalDishName" class="font-bold text-[#292820]"></span> khỏi thực đơn không? 
+      Hành động này sẽ xóa dữ liệu vĩnh viễn và không thể hoàn tác.
+    </p>
+
+    <form id="deleteForm" method="POST" action="">
+      <input type="hidden" name="_method" value="DELETE" />
+      <div class="modal-action flex justify-end gap-3 mt-6">
+        <button type="button" onclick="closeDeleteModal()" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#292820] border border-[#E9E0D2] rounded-xl px-4">
+          Hủy Bỏ
+        </button>
+        <button type="submit" class="btn btn-sm bg-[#B86F45] hover:bg-[#985732] text-[#FFFDF8] border-none rounded-xl px-5 font-medium shadow-xs">
+          Xác Nhận Xóa
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button onclick="closeDeleteModal()">close</button>
+  </form>
+</dialog>
+
+<script>
+  function openDeleteModal(id, name) {
+    const modal = document.getElementById('deleteModal');
+    const form = document.getElementById('deleteForm');
+    const nameSpan = document.getElementById('modalDishName');
+    
+    form.action = `/admin/dishes/${id}?_method=DELETE`;
+    nameSpan.textContent = `"${name}"`;
+    modal.showModal();
+  }
+
+  function closeDeleteModal() {
+    const modal = document.getElementById('deleteModal');
+    modal.close();
+  }
+</script>

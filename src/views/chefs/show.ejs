@@ -1,0 +1,71 @@
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <div class="mb-6 flex items-center justify-between">
+    <a href="/chefs" class="inline-flex items-center gap-2 text-sm font-medium text-[#7A7062] hover:text-[#354B35] transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+      Quay lại Danh Sách Đầu Bếp
+    </a>
+    <div class="flex items-center gap-2">
+      <a href="/admin/chefs/<%= chef.id %>/edit" class="btn btn-xs bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] rounded-lg">
+        ✎ Quản trị đầu bếp này
+      </a>
+    </div>
+  </div>
+
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl overflow-hidden shadow-xs flex flex-col md:flex-row">
+    
+    <!-- Portrait: 4:3 Aspect Ratio in clean flex container -->
+    <div class="w-full md:w-1/2 bg-[#FAF5EC] relative flex-shrink-0 flex items-center justify-center overflow-hidden border-b md:border-b-0 md:border-r border-[#E9E0D2]">
+      <div class="w-full aspect-4-3 relative overflow-hidden">
+        <img 
+          src="<%= getImageUrl(chef.imagePath) %>" 
+          alt="<%= chef.name %>" 
+          class="w-full h-full object-cover block"
+          onerror="this.src='/images/placeholder.svg'"
+        />
+        <% if (chef.isFeatured) { %>
+          <span class="absolute top-4 left-4 bg-[#354B35] text-[#FFFDF8] text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wider shadow-sm z-10">
+            ★ Bếp Trưởng Danh Tiếng
+          </span>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Chef Info -->
+    <div class="w-full md:w-1/2 p-6 sm:p-10 lg:p-12 flex flex-col justify-between space-y-6">
+      <div>
+        <div class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[#354B35]/15 text-[#354B35] mb-3">
+          <%= chef.title || 'Đầu Bếp' %>
+        </div>
+
+        <h1 class="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#292820] leading-tight mb-2">
+          <%= chef.name %>
+        </h1>
+
+        <% if (chef.experience) { %>
+          <div class="text-sm font-semibold text-[#B86F45] mb-6 flex items-center gap-2">
+            <span> Kinh nghiệm: <%= chef.experience %></span>
+          </div>
+        <% } %>
+
+        <div class="w-16 h-1 bg-[#354B35] rounded-full mb-6"></div>
+
+        <div class="text-[#7A7062] leading-relaxed text-sm sm:text-base space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-[#292820]">
+            Tiểu Sử & Triết Lý Ẩm Thực
+          </h4>
+          <p>
+            <%= chef.description || 'Đam mê gìn giữ và nâng tầm ẩm thực Việt Nam thông qua từng món ăn chứa chan hương vị đất trời.' %>
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-6 border-t border-[#E9E0D2] flex items-center justify-between text-xs text-[#7A7062]">
+        <span>Mã đầu bếp: #CHEF-<%= chef.id %></span>
+        <span>Cập nhật: <%= new Date(chef.updatedAt).toLocaleDateString('vi-VN') %></span>
+      </div>
+    </div>
+
+  </div>
+</div>

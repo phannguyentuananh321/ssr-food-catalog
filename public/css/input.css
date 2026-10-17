@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@theme {
+  --color-warm-cream: #FAF5EC;
+  --color-ivory: #FFFDF8;
+  --color-olive-green: #354B35;
+  --color-olive-dark: #273727;
+  --color-olive-light: #4A654A;
+  --color-terracotta: #B86F45;
+  --color-terracotta-dark: #985732;
+  --color-charcoal: #292820;
+  --color-sand: #E9E0D2;
+  --color-sand-dark: #D4C7B3;
+  --font-serif: "Playfair Display", Georgia, Cambria, serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Custom utility styles for Warm Cream theme */
+body {
+  background-color: var(--color-warm-cream);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 4:3 Aspect Ratio for Dish Cards as strictly required */
+.aspect-4-3 {
+  aspect-ratio: 4 / 3;
+}
+
+/* Vanta canvas container */
+#vanta-hero-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hero-content-wrapper {
+  position: relative;
+  z-index: 10;
+}

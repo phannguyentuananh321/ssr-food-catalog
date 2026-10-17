@@ -1,0 +1,27 @@
+<% if (typeof successMessage !== 'undefined' && successMessage) { %>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+    <div role="alert" class="alert bg-[#354B35]/10 border border-[#354B35]/30 text-[#354B35] flex items-center justify-between rounded-xl shadow-xs py-3 px-4">
+      <div class="flex items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span class="text-sm font-medium"><%= successMessage %></span>
+      </div>
+      <button onclick="this.parentElement.remove()" class="btn btn-ghost btn-xs text-[#354B35]">✕</button>
+    </div>
+  </div>
+<% } %>
+
+<% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+    <div role="alert" class="alert bg-[#B86F45]/15 border border-[#B86F45]/40 text-[#985732] flex items-center justify-between rounded-xl shadow-xs py-3 px-4">
+      <div class="flex items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span class="text-sm font-medium"><%= errorMessage %></span>
+      </div>
+      <button onclick="this.parentElement.remove()" class="btn btn-ghost btn-xs text-[#985732]">✕</button>
+    </div>
+  </div>
+<% } %>

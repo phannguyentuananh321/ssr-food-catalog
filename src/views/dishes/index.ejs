@@ -1,0 +1,283 @@
+<!-- HERO SECTION — OPTION 3: HERO SLIDER & MÓN NỔI BẬT -->
+<section class="relative bg-[#FAF5EC] border-b border-[#E9E0D2] overflow-hidden min-h-[480px] flex items-center">
+  <!-- Vanta.js Canvas container (strictly client-side) -->
+  <div id="vanta-hero-canvas"></div>
+
+  <!-- Hero Static Content -->
+  <div class="hero-content-wrapper max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <!-- Hero Left: Editorial Intro -->
+      <div class="lg:col-span-6 space-y-6">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#354B35]/10 border border-[#354B35]/20 text-[#354B35] text-xs font-semibold uppercase tracking-wider">
+          <span class="w-2 h-2 rounded-full bg-[#354B35] animate-pulse"></span>
+          Tuyển Tập Ẩm Thực Tinh Hoa
+        </div>
+        <h1 class="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold text-[#292820] leading-tight">
+          Hương Vị Bản Địa, <br>
+          <span class="text-[#354B35] italic">Nghệ Thuật Đương Đại</span>
+        </h1>
+        <p class="text-base sm:text-lg text-[#7A7062] max-w-xl leading-relaxed">
+          Mỗi món ăn là một bản hòa ca giữa nguyên liệu tươi ngon chọn lọc và niềm say mê của những nghệ nhân ẩm thực Việt.
+        </p>
+        <div class="flex flex-wrap items-center gap-4 pt-2">
+          <a href="#menu-catalog" class="btn bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none px-6 py-3 rounded-xl font-medium shadow-sm transition-all hover:scale-102">
+            Khám Phá Thực Đơn
+          </a>
+          <a href="/chefs" class="btn bg-[#FFFDF8] hover:bg-[#FAF5EC] text-[#292820] border border-[#E9E0D2] px-6 py-3 rounded-xl font-medium shadow-xs">
+            Gặp Gỡ Đầu Bếp
+          </a>
+        </div>
+      </div>
+
+      <!-- Hero Right: Featured Dishes Slider / Cards Carousel -->
+      <div class="lg:col-span-6">
+        <% if (featuredDishes && featuredDishes.length > 0) { %>
+          <div class="bg-[#FFFDF8]/90 backdrop-blur-xs border border-[#E9E0D2] rounded-3xl p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-xs font-bold uppercase tracking-widest text-[#B86F45]">
+                ★ Món Nổi Bật Được Yêu Thích
+              </span>
+              <span class="text-xs text-[#7A7062]">
+                <%= featuredDishes.length %> món tuyển chọn
+              </span>
+            </div>
+
+            <!-- Featured Slider Cards -->
+            <div class="carousel w-full rounded-2xl overflow-hidden shadow-xs">
+              <% featuredDishes.forEach((feat, index) => { %>
+                <div id="slide-<%= index %>" class="carousel-item relative w-full flex flex-col sm:flex-row bg-[#FAF5EC]/60 border border-[#E9E0D2]">
+                  <div class="w-full sm:w-1/2 aspect-4-3 overflow-hidden bg-[#E9E0D2]">
+                    <img 
+                      src="<%= getImageUrl(feat.imagePath) %>" 
+                      alt="<%= feat.name %>" 
+                      class="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                      onerror="this.src='/images/placeholder.svg'"
+                    />
+                  </div>
+                  <div class="w-full sm:w-1/2 p-5 flex flex-col justify-between">
+                    <div>
+                      <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#354B35]/10 text-[#354B35] mb-2">
+                        <%= feat.category %>
+                      </span>
+                      <h3 class="font-serif text-lg font-bold text-[#292820] line-clamp-2">
+                        <%= feat.name %>
+                      </h3>
+                      <p class="text-xs text-[#7A7062] line-clamp-2 mt-2 leading-relaxed">
+                        <%= feat.description || 'Hương vị truyền thống đậm đà tinh tế.' %>
+                      </p>
+                    </div>
+                    <div class="flex items-center justify-between mt-4 pt-3 border-t border-[#E9E0D2]">
+                      <span class="text-base font-bold text-[#354B35]">
+                        <%= feat.price ? Number(feat.price).toLocaleString('vi-VN') + ' đ' : 'Liên hệ' %>
+                      </span>
+                      <a href="/dishes/<%= feat.id %>" class="btn btn-xs bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-lg">
+                        Chi tiết »
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+
+            <!-- Slider controls -->
+            <div class="flex justify-center w-full py-3 gap-2">
+              <% featuredDishes.forEach((_, idx) => { %>
+                <a href="#slide-<%= idx %>" class="btn btn-xs btn-circle bg-[#E9E0D2] hover:bg-[#354B35] hover:text-white border-none text-[10px]">
+                  <%= idx + 1 %>
+                </a>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MAIN CATALOG SECTION -->
+<div id="menu-catalog" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+  <!-- Search, Filter & Sort Bar -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-6 mb-10 shadow-xs">
+    <form method="GET" action="/dishes" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+        
+        <!-- Search Keyword -->
+        <div class="md:col-span-4">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#7A7062] mb-1.5">
+            Tìm Kiếm Món Ăn
+          </label>
+          <div class="relative">
+            <input 
+              type="text" 
+              name="q" 
+              value="<%= typeof queryParams !== 'undefined' && queryParams.q ? queryParams.q : '' %>"
+              placeholder="Nhập tên món ăn..."
+              class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+            />
+          </div>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="md:col-span-3">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#7A7062] mb-1.5">
+            Danh Mục
+          </label>
+          <select name="category" class="select select-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm">
+            <option value="all">Tất cả danh mục</option>
+            <% if (categories && categories.length > 0) { %>
+              <% categories.forEach(cat => { %>
+                <option value="<%= cat %>" <%= typeof queryParams !== 'undefined' && queryParams.category === cat ? 'selected' : '' %>>
+                  <%= cat %>
+                </option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
+
+        <!-- Price Range Filter -->
+        <div class="md:col-span-3">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#7A7062] mb-1.5">
+            Khoảng Giá (VND)
+          </label>
+          <div class="flex items-center gap-2">
+            <input 
+              type="number" 
+              name="minPrice" 
+              min="0"
+              step="1000"
+              placeholder="Từ..." 
+              value="<%= typeof queryParams !== 'undefined' && queryParams.minPrice ? queryParams.minPrice : '' %>"
+              class="input input-bordered w-1/2 bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+            />
+            <span class="text-[#7A7062]">-</span>
+            <input 
+              type="number" 
+              name="maxPrice" 
+              min="0"
+              step="1000"
+              placeholder="Đến..." 
+              value="<%= typeof queryParams !== 'undefined' && queryParams.maxPrice ? queryParams.maxPrice : '' %>"
+              class="input input-bordered w-1/2 bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+            />
+          </div>
+        </div>
+
+        <!-- Sort Option -->
+        <div class="md:col-span-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#7A7062] mb-1.5">
+            Sắp Xếp
+          </label>
+          <select name="sort" class="select select-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm">
+            <option value="newest" <%= typeof queryParams !== 'undefined' && queryParams.sort === 'newest' ? 'selected' : '' %>>Mới nhất</option>
+            <option value="price-asc" <%= typeof queryParams !== 'undefined' && queryParams.sort === 'price-asc' ? 'selected' : '' %>>Giá tăng dần</option>
+            <option value="price-desc" <%= typeof queryParams !== 'undefined' && queryParams.sort === 'price-desc' ? 'selected' : '' %>>Giá giảm dần</option>
+            <option value="name-asc" <%= typeof queryParams !== 'undefined' && queryParams.sort === 'name-asc' ? 'selected' : '' %>>Tên A - Z</option>
+            <option value="name-desc" <%= typeof queryParams !== 'undefined' && queryParams.sort === 'name-desc' ? 'selected' : '' %>>Tên Z - A</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <a href="/dishes" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#7A7062] border border-[#E9E0D2] rounded-xl font-medium">
+          Đặt Lại
+        </a>
+        <button type="submit" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium px-5">
+          Áp Dụng Bộ Lọc
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- SECTION TITLE & TOTAL COUNT -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h2 class="font-serif text-2xl sm:text-3xl font-bold text-[#292820]">
+        Danh Sách Món Ăn
+      </h2>
+      <p class="text-sm text-[#7A7062] mt-1">
+        <%= pagination.totalItems %> món ăn sẵn sàng phục vụ
+      </p>
+    </div>
+  </div>
+
+  <!-- DISH CARDS GRID (Mandatory 4:3 Image Aspect Ratio) -->
+  <% if (dishes && dishes.length > 0) { %>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+      <% dishes.forEach(dish => { %>
+        <article class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group">
+          
+          <!-- 1. Dish Image: Strictly 4:3 Ratio -->
+          <div class="w-full aspect-4-3 overflow-hidden bg-[#FAF5EC] relative">
+            <img 
+              src="<%= getImageUrl(dish.imagePath) %>" 
+              alt="<%= dish.name %>" 
+              loading="lazy"
+              class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              onerror="this.src='/images/placeholder.svg'"
+            />
+            <% if (dish.isFeatured) { %>
+              <span class="absolute top-3 left-3 bg-[#354B35] text-[#FFFDF8] text-[11px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-xs">
+                ★ Tuyển chọn
+              </span>
+            <% } %>
+          </div>
+
+          <!-- Card Content Body -->
+          <div class="p-6 flex flex-col flex-grow justify-between">
+            <div class="space-y-2">
+              <!-- 2. Category -->
+              <span class="inline-block text-xs font-semibold text-[#B86F45] uppercase tracking-wider">
+                <%= dish.category %>
+              </span>
+
+              <!-- 3. Dish Name: Max 2 lines -->
+              <h3 class="font-serif text-xl font-bold text-[#292820] line-clamp-2 group-hover:text-[#354B35] transition-colors">
+                <a href="/dishes/<%= dish.id %>">
+                  <%= dish.name %>
+                </a>
+              </h3>
+
+              <!-- 4. Price in prominent Olive Green -->
+              <div class="text-lg font-bold text-[#354B35]">
+                <%= dish.price ? Number(dish.price).toLocaleString('vi-VN') + ' ₫' : 'Liên hệ' %>
+              </div>
+
+              <!-- 5. Short Description -->
+              <p class="text-sm text-[#7A7062] line-clamp-2 leading-relaxed">
+                <%= dish.description || 'Hương vị truyền thống được chế biến từ những nguyên liệu tươi ngon nhất.' %>
+              </p>
+            </div>
+
+            <!-- 6. View Detail CTA Button -->
+            <div class="pt-5 mt-4 border-t border-[#E9E0D2]">
+              <a href="/dishes/<%= dish.id %>" class="btn btn-sm w-full bg-[#FAF5EC] hover:bg-[#354B35] text-[#354B35] hover:text-[#FFFDF8] border border-[#E9E0D2] rounded-xl font-medium transition-colors">
+                Xem Chi Tiết Món Ăn »
+              </a>
+            </div>
+          </div>
+
+        </article>
+      <% }) %>
+    </div>
+
+    <!-- Server-side Pagination Component -->
+    <%- include('../partials/pagination') %>
+
+  <% } else { %>
+    <!-- Empty State -->
+    <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-12 text-center my-8">
+      <div class="w-16 h-16 mx-auto rounded-full bg-[#FAF5EC] flex items-center justify-center text-[#B86F45] text-2xl font-serif mb-4">
+        🔍
+      </div>
+      <h3 class="font-serif text-xl font-bold text-[#292820] mb-2">Không Tìm Thấy Món Ăn Phù Hợp</h3>
+      <p class="text-sm text-[#7A7062] max-w-md mx-auto mb-6">
+        Không có món ăn nào khớp với tiêu chí tìm kiếm hoặc bộ lọc hiện tại của bạn. Vui lòng thử tìm với từ khóa khác hoặc đặt lại bộ lọc.
+      </p>
+      <a href="/dishes" class="btn btn-sm bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] border-none rounded-xl px-5">
+        Xóa Bộ Lọc & Xem Tất Cả
+      </a>
+    </div>
+  <% } %>
+</div>

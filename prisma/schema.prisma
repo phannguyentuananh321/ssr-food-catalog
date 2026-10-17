@@ -1,0 +1,53 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Dish {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?  @db.Text
+  price       Int      @default(0)
+  category    String   @default("Món chính")
+  imagePath   String?
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([price])
+  @@index([createdAt])
+}
+
+model Chef {
+  id          Int      @id @default(autoincrement())
+  name        String
+  title       String?
+  description String?  @db.Text
+  experience  String?
+  imagePath   String?
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model Ingredient {
+  id          Int      @id @default(autoincrement())
+  name        String
+  category    String?  @default("Gia vị")
+  description String?  @db.Text
+  unit        String?  @default("gram")
+  imagePath   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([createdAt])
+}

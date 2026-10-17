@@ -1,0 +1,179 @@
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <!-- Top Bar -->
+  <div class="mb-8 flex items-center justify-between">
+    <div>
+      <a href="/admin/dishes" class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#7A7062] hover:text-[#354B35] transition-colors mb-2">
+        ← Quay lại Danh sách Quản trị
+      </a>
+      <h1 class="font-serif text-3xl font-bold text-[#292820]">
+        <%= isEdit ? 'Chỉnh Sửa Món Ăn' : 'Thêm Món Ăn Mới' %>
+      </h1>
+      <p class="text-sm text-[#7A7062] mt-1">
+        <%= isEdit ? 'Cập nhật thông tin chi tiết và hình ảnh món ăn.' : 'Điền các thông tin để bổ sung món mới vào danh mục phục vụ.' %>
+      </p>
+    </div>
+  </div>
+
+  <!-- Main Form Card -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-8 sm:p-10 shadow-xs">
+    <form 
+      method="POST" 
+      action="<%= isEdit ? '/admin/dishes/' + dish.id + '?_method=PATCH' : '/admin/dishes' %>" 
+      enctype="multipart/form-data" 
+      class="space-y-6">
+      
+      <% if (isEdit) { %>
+        <input type="hidden" name="_method" value="PATCH" />
+      <% } %>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <!-- 1. Dish Name -->
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Tên Món Ăn <span class="text-[#B86F45]">*</span>
+          </label>
+          <input 
+            type="text" 
+            name="name" 
+            required
+            value="<%= typeof dish !== 'undefined' && dish.name ? dish.name : '' %>"
+            placeholder="Ví dụ: Phở Bò Tái Lăn Hà Nội"
+            class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm <%= errors && errors.name ? 'border-red-500 bg-red-50/20' : '' %>"
+          />
+          <% if (errors && errors.name) { %>
+            <p class="text-xs text-red-600 mt-1.5 font-medium"><%= errors.name %></p>
+          <% } %>
+        </div>
+
+        <!-- 2. Category -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Danh Mục Món Ăn <span class="text-[#B86F45]">*</span>
+          </label>
+          <input 
+            type="text" 
+            name="category" 
+            required
+            list="category-suggestions"
+            value="<%= typeof dish !== 'undefined' && dish.category ? dish.category : '' %>"
+            placeholder="Ví dụ: Món nước, Món nướng..."
+            class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm <%= errors && errors.category ? 'border-red-500 bg-red-50/20' : '' %>"
+          />
+          <datalist id="category-suggestions">
+            <option value="Món nước">
+            <option value="Món nướng">
+            <option value="Món cuốn">
+            <option value="Món chiên">
+            <option value="Món xào">
+            <option value="Món chính">
+            <option value="Tráng miệng">
+            <option value="Đồ uống">
+          </datalist>
+          <% if (errors && errors.category) { %>
+            <p class="text-xs text-red-600 mt-1.5 font-medium"><%= errors.category %></p>
+          <% } %>
+        </div>
+
+        <!-- 3. Price -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Giá Niêm Yết (VND) <span class="text-[#B86F45]">*</span>
+          </label>
+          <input 
+            type="number" 
+            name="price" 
+            required
+            min="0"
+            step="1000"
+            value="<%= typeof dish !== 'undefined' && dish.price !== undefined ? dish.price : '' %>"
+            placeholder="Ví dụ: 65000"
+            class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm <%= errors && errors.price ? 'border-red-500 bg-red-50/20' : '' %>"
+          />
+          <% if (errors && errors.price) { %>
+            <p class="text-xs text-red-600 mt-1.5 font-medium"><%= errors.price %></p>
+          <% } %>
+        </div>
+
+        <!-- 4. Featured Checkbox -->
+        <div class="sm:col-span-2">
+          <label class="flex items-center gap-3 cursor-pointer p-4 bg-[#FAF5EC] border border-[#E9E0D2] rounded-2xl hover:border-[#354B35] transition-colors">
+            <input 
+              type="checkbox" 
+              name="isFeatured" 
+              value="true"
+              class="checkbox checkbox-sm checkbox-success"
+              <%= (typeof dish !== 'undefined' && (dish.isFeatured === true || dish.isFeatured === 'true')) ? 'checked' : '' %>
+            />
+            <div>
+              <span class="text-sm font-bold text-[#292820]">Đặt làm Món Nổi Bật (Featured)</span>
+              <p class="text-xs text-[#7A7062]">Món ăn sẽ xuất hiện trên Hero Slider của trang chủ công khai.</p>
+            </div>
+          </label>
+        </div>
+
+        <!-- 5. Image Upload & Preview -->
+        <div class="sm:col-span-2 space-y-3">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820]">
+            Hình Ảnh Món Ăn (Tỉ lệ chuẩn 4:3)
+          </label>
+          
+          <div class="flex flex-col sm:flex-row items-start gap-6">
+            <!-- Image preview box -->
+            <div class="w-48 aspect-4-3 rounded-2xl overflow-hidden bg-[#FAF5EC] border border-[#E9E0D2] shrink-0 relative">
+              <% const initialImage = (typeof dish !== 'undefined' && dish.imagePath) ? getImageUrl(dish.imagePath) : '/images/placeholder.svg'; %>
+              <img 
+                id="dish-image-preview" 
+                src="<%= initialImage %>" 
+                alt="Xem trước hình ảnh" 
+                class="w-full h-full object-cover"
+                onerror="this.src='/images/placeholder.svg'"
+              />
+            </div>
+
+            <!-- Upload input and note -->
+            <div class="flex-grow space-y-2">
+              <input 
+                type="file" 
+                name="image" 
+                accept="image/jpeg,image/png,image/webp"
+                onchange="previewImage(event, 'dish-image-preview')"
+                class="file-input file-input-bordered file-input-sm w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] rounded-xl text-sm"
+              />
+              <p class="text-xs text-[#7A7062] leading-relaxed">
+                Định dạng hỗ trợ: JPG, PNG, WEBP. Dung lượng tối đa 5MB.<br>
+                <% if (isEdit) { %>
+                  <span class="text-[#354B35] font-semibold">Ghi chú:</span> Nếu không chọn ảnh mới, hệ thống sẽ giữ nguyên ảnh hiện tại.
+                <% } else { %>
+                  Hình ảnh sẽ được tải trực tiếp lên Supabase Storage bucket <code>dish-images</code>.
+                <% } %>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Description -->
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Mô Tả Hương Vị & Thành Phần
+          </label>
+          <textarea 
+            name="description" 
+            rows="4"
+            placeholder="Chia sẻ câu chuyện, hương vị đặc trưng, nước sốt hoặc phương pháp chế biến món ăn..."
+            class="textarea textarea-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm leading-relaxed"><%= typeof dish !== 'undefined' && dish.description ? dish.description : '' %></textarea>
+        </div>
+      </div>
+
+      <!-- Form Action Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-6 border-t border-[#E9E0D2]">
+        <a href="/admin/dishes" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#292820] border border-[#E9E0D2] rounded-xl px-5 font-medium">
+          Hủy Bỏ
+        </a>
+        <button type="submit" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl px-7 font-medium shadow-xs">
+          <%= isEdit ? 'Lưu Thay Đổi' : 'Thêm Món Ăn' %>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
