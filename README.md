@@ -434,11 +434,40 @@ Trang hỗ trợ:
 
 ## 7. Quy Chuẩn HTTP & PRG (Post-Redirect-Get)
 
-- `GET`: chỉ đọc dữ liệu, **không** thay đổi database.
-- `POST`: tạo mới (multipart/form-data).
-- `PATCH`: cập nhật (form HTML dùng `method-override` + hidden `_method=PATCH`).
-- `DELETE`: xóa (form HTML dùng `method-override` + hidden `_method=DELETE`).
-- Sau mỗi thao tác ghi thành công → `303 See Other` kèm query status để chống submit trùng khi refresh.
+### 7.1 Nguyên tắc bắt buộc: sửa dữ liệu KHÔNG dùng `GET`
+
+> **`GET` chỉ được dùng để ĐỌC.** Mọi thao tác tạo / sửa / xoá dữ liệu **tuyệt đối không** dùng `GET`, mà dùng `POST` / `PATCH` / `DELETE`.
+
+| Hành động | Method HTTP dùng (thay cho GET) | Form HTML gửi đi | Route tiêu biểu |
+| :--- | :--- | :--- | :--- |
+| **Đọc / tìm kiếm / lọc** | `GET` (an toàn, chỉ đọc) | `<form method="GET">` | `GET /dishes`, `GET /admin/dishes` |
+| **Tạo mới** | `POST` | `<form method="POST" enctype="multipart/form-data">` | `POST /admin/dishes` |
+| **Cập nhật** | `PATCH` | `<form method="POST">` + hidden `_method=PATCH` | `PATCH /admin/dishes/:id` |
+| **Xoá** | `DELETE` | `<form method="POST">` + hidden `_method=DELETE` | `DELETE /admin/dishes/:id` |
+
+Vì HTML form chỉ hỗ trợ `GET`/`POST`, các method `PATCH`/`DELETE` được gửi qua **`method-override`** bằng trường ẩn `_method`.
+
+### 7.2 Vì sao `GET` không thể sửa dữ liệu (đảm bảo ở tầng thư viện)
+
+- Thư viện `method-override` mặc định **chỉ xử lý request `POST`** (`methods = ['POST']` trong `method-override/index.js`). Do đó:
+  - `GET /admin/dishes/5?_method=DELETE` → **không** bị đổi thành `DELETE`, rơi vào `404`.
+  - Chỉ `POST ...?_method=DELETE` (hoặc body `_method`) mới trở thành `DELETE`.
+- Tất cả route ghi đều khai báo bằng `router.post(...)`, `router.patch(...)`, `router.delete(...)` — **không** có route ghi nào là `router.get(...)` (`src/routes/admin.routes.js`).
+- Các hàm ghi trong controller (`create` / `update` / `remove`) chỉ được gắn vào route `POST`/`PATCH`/`DELETE`.
+
+Kiểm chứng nhanh (an toàn, dùng ID không tồn tại):
+
+| Request | Kết quả |
+| :--- | :--- |
+| `GET /admin/dishes/999999` | `404` |
+| `GET /admin/dishes/999999?_method=DELETE` | `404` ← **GET không sửa được dữ liệu** |
+| `POST /admin/dishes/999999?_method=DELETE` | `303` (đi tới handler xoá) |
+| `DELETE /admin/dishes/999999` | `303` |
+
+### 7.3 PRG (Post-Redirect-Get)
+
+- Sau mỗi thao tác ghi thành công → **`303 See Other`** kèm query status (`?success=...` / `?error=...`) để chống submit trùng khi người dùng refresh.
+- Sau `303`, trình duyệt luôn quay về một `GET` để hiển thị kết quả — nghĩa là response cuối cùng hiển thị cho người dùng luôn là một trang `GET` an toàn.
 
 ---
 
@@ -454,9 +483,3 @@ npm test
 ```
 
 ---
-
-## 9. Lưu Ý Bảo Mật (Đã Biết)
-
-- Các route `/admin` hiện **chưa có xác thực**; không nên public ghi dữ liệu ở production. Hạng mục này ngoài phạm vi bản refactor hiện tại, được ghi nhận để xử lý riêng.
-- **Không commit `.env`** — secret chỉ nằm trong biến môi trường của nền tảng triển khai.
-- `SUPABASE_SERVICE_ROLE_KEY` là khóa đặc quyền cao, chỉ dùng phía server.
