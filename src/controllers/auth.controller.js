@@ -344,9 +344,30 @@ async function login(req, res, next) {
   }
 }
 
+// ==========================================
+// BƯỚC 6: ĐĂNG XUẤT
+// ==========================================
+
 async function logout(req, res, next) {
-  // Sẽ triển khai chi tiết ở BƯỚC 6
-  return res.redirect(303, '/login');
+  try {
+    if (!req.session) {
+      res.clearCookie('sid', { path: '/' });
+      return res.redirect(303, '/login');
+    }
+
+    // 1. Hủy bản ghi session ở store trước
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('[LOGOUT ERROR]:', err.message);
+      }
+      // 2. Xóa cookie sid
+      res.clearCookie('sid', { path: '/' });
+      // 3. 303 tới /login
+      return res.redirect(303, '/login');
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function renderForgotPage(req, res) {
