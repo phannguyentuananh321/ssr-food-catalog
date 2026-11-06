@@ -1,0 +1,70 @@
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" data-bookmarks-root>
+  <!-- Heading -->
+  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+    <div>
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#354B35]/10 border border-[#354B35]/20 text-[#354B35] text-xs font-semibold uppercase tracking-wider mb-3">
+        Bộ Sưu Tập Cá Nhân
+      </div>
+      <h1 class="font-serif text-3xl sm:text-4xl font-bold text-[#292820]">
+        Danh Sách Đã Lưu
+      </h1>
+      <p class="text-sm text-[#7A7062] mt-2 max-w-2xl leading-relaxed">
+        Trình duyệt chỉ lưu mã (ID) của món ăn, đầu bếp và nguyên liệu. Nội dung hiển thị luôn được truy vấn mới từ PostgreSQL.
+      </p>
+    </div>
+    <a href="/dishes" class="btn bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium px-5">
+      Tiếp Tục Khám Phá
+    </a>
+  </div>
+
+  <!-- Tabs -->
+  <div role="tablist" aria-label="Danh mục đã lưu" class="flex flex-wrap gap-2 border-b border-[#E9E0D2] pb-3 mb-8">
+    <button type="button" role="tab" aria-selected="true" data-bookmark-tab="dishes" class="bookmark-tab is-active">
+      🍽 Món Ăn <span data-bookmark-tab-count class="bookmark-tab-count">0</span>
+    </button>
+    <button type="button" role="tab" aria-selected="false" data-bookmark-tab="chefs" class="bookmark-tab">
+      👨‍🍳 Đầu Bếp <span data-bookmark-tab-count class="bookmark-tab-count">0</span>
+    </button>
+    <button type="button" role="tab" aria-selected="false" data-bookmark-tab="ingredients" class="bookmark-tab">
+      🥬 Nguyên Liệu <span data-bookmark-tab-count class="bookmark-tab-count">0</span>
+    </button>
+  </div>
+
+  <!-- Loading / error -->
+  <div data-bookmarks-loading class="flex items-center justify-center gap-3 py-16 text-sm text-[#7A7062]">
+    <span class="loading loading-spinner loading-sm text-[#354B35]"></span>
+    Đang tải danh sách đã lưu…
+  </div>
+  <p data-bookmarks-error class="hidden mb-6 rounded-xl border border-red-300 bg-red-50/40 px-4 py-3 text-sm text-red-700 font-medium" role="alert"></p>
+
+  <!-- Panels -->
+  <section data-bookmark-panel="dishes" role="tabpanel">
+    <div data-bookmark-list class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+    <div data-bookmark-empty class="hidden bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-12 text-center">
+      <div class="w-14 h-14 mx-auto rounded-full bg-[#FAF5EC] flex items-center justify-center text-2xl mb-4">♡</div>
+      <h3 class="font-serif text-xl font-bold text-[#292820] mb-2">Chưa Lưu Món Ăn Nào</h3>
+      <p class="text-sm text-[#7A7062] mb-5">Nhấn nút “Lưu” trên thẻ món ăn để thêm vào bộ sưu tập của bạn.</p>
+      <a href="/dishes" class="btn btn-sm bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] border-none rounded-xl px-5">Khám Phá Món Ăn</a>
+    </div>
+  </section>
+
+  <section data-bookmark-panel="chefs" role="tabpanel" class="hidden">
+    <div data-bookmark-list class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+    <div data-bookmark-empty class="hidden bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-12 text-center">
+      <div class="w-14 h-14 mx-auto rounded-full bg-[#FAF5EC] flex items-center justify-center text-2xl mb-4">♡</div>
+      <h3 class="font-serif text-xl font-bold text-[#292820] mb-2">Chưa Lưu Đầu Bếp Nào</h3>
+      <p class="text-sm text-[#7A7062] mb-5">Lưu hồ sơ những nghệ nhân ẩm thực bạn muốn theo dõi.</p>
+      <a href="/chefs" class="btn btn-sm bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] border-none rounded-xl px-5">Gặp Gỡ Đầu Bếp</a>
+    </div>
+  </section>
+
+  <section data-bookmark-panel="ingredients" role="tabpanel" class="hidden">
+    <div data-bookmark-list class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+    <div data-bookmark-empty class="hidden bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-12 text-center">
+      <div class="w-14 h-14 mx-auto rounded-full bg-[#FAF5EC] flex items-center justify-center text-2xl mb-4">♡</div>
+      <h3 class="font-serif text-xl font-bold text-[#292820] mb-2">Chưa Lưu Nguyên Liệu Nào</h3>
+      <p class="text-sm text-[#7A7062] mb-5">Lưu nguyên liệu bản địa để xem lại bất cứ lúc nào.</p>
+      <a href="/ingredients" class="btn btn-sm bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] border-none rounded-xl px-5">Khám Phá Nguyên Liệu</a>
+    </div>
+  </section>
+</div>

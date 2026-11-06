@@ -1,0 +1,34 @@
+<% if (typeof pagination !== 'undefined' && pagination.totalItems > 0) { %>
+  <% if (viewMode === 'pages') { %>
+    <%- include('./pagination') %>
+  <% } else { %>
+    <div
+      data-catalog-controls
+      data-view-mode="<%= viewMode %>"
+      data-api-base="<%= apiBase %>"
+      data-next-page="<%= pagination.hasNext ? pagination.nextPage : '' %>"
+      data-total-pages="<%= pagination.totalPages %>"
+      class="flex flex-col items-center gap-3 py-8 border-t border-[#E9E0D2] mt-8"
+    >
+      <% if (viewMode === 'infinite') { %>
+        <div data-infinite-sentinel class="h-10 w-full" aria-hidden="true"></div>
+        <p data-catalog-status class="hidden text-sm text-[#7A7062]">
+          Đang tải thêm…
+        </p>
+      <% } %>
+
+      <button
+        type="button"
+        data-load-more
+        class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl px-6 font-medium shadow-xs <%= viewMode === 'infinite' || !pagination.hasNext ? 'hidden' : '' %>"
+      >
+        Tải thêm <%= typeof itemLabel !== 'undefined' ? itemLabel : 'kết quả' %>
+      </button>
+
+      <p data-catalog-end class="text-sm text-[#7A7062] <%= pagination.hasNext ? 'hidden' : '' %>">
+        Đã hiển thị tất cả <%= pagination.totalItems %> kết quả.
+      </p>
+      <p data-catalog-error class="hidden text-sm text-red-600"></p>
+    </div>
+  <% } %>
+<% } %>

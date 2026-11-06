@@ -1,0 +1,143 @@
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <div class="mb-8 flex items-center justify-between">
+    <div>
+      <a href="/admin/ingredients" class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#7A7062] hover:text-[#354B35] transition-colors mb-2">
+        ← Quay lại Danh sách Nguyên Liệu
+      </a>
+      <h1 class="font-serif text-3xl font-bold text-[#292820]">
+        <%= isEdit ? 'Chỉnh Sửa Nguyên Liệu' : 'Thêm Nguyên Liệu Mới' %>
+      </h1>
+      <p class="text-sm text-[#7A7062] mt-1">
+        <%= isEdit ? 'Cập nhật thông tin chi tiết và xuất xứ nguyên liệu.' : 'Nhập thông tin nông sản, gia vị để đưa vào danh mục.' %>
+      </p>
+    </div>
+  </div>
+
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-8 sm:p-10 shadow-xs">
+    <form 
+      method="POST" 
+      action="<%= isEdit ? '/admin/ingredients/' + ingredient.id + '?_method=PATCH' : '/admin/ingredients' %>" 
+      enctype="multipart/form-data" 
+      class="space-y-6">
+      
+      <% if (isEdit) { %>
+        <input type="hidden" name="_method" value="PATCH" />
+      <% } %>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <!-- Name -->
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Tên Nguyên Liệu / Thảo Mộc <span class="text-[#B86F45]">*</span>
+          </label>
+          <input 
+            type="text" 
+            name="name" 
+            required
+            value="<%= typeof ingredient !== 'undefined' && ingredient.name ? ingredient.name : '' %>"
+            placeholder="Ví dụ: Nước Mắm Cốt Cá Cơm Phú Quốc"
+            class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm <%= errors && errors.name ? 'border-red-500 bg-red-50/20' : '' %>"
+          />
+          <% if (errors && errors.name) { %>
+            <p class="text-xs text-red-600 mt-1.5 font-medium"><%= errors.name %></p>
+          <% } %>
+        </div>
+
+        <!-- Category -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Phân Loại
+          </label>
+          <input 
+            type="text" 
+            name="category" 
+            list="ing-category-list"
+            value="<%= typeof ingredient !== 'undefined' && ingredient.category ? ingredient.category : '' %>"
+            placeholder="Ví dụ: Gia vị truyền thống, Rau thơm..."
+            class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+          />
+          <datalist id="ing-category-list">
+            <option value="Gia vị truyền thống">
+            <option value="Rau tươi">
+            <option value="Nông sản truyền thống">
+            <option value="Thịt & Thủy hải sản">
+            <option value="Thảo mộc tự nhiên">
+          </datalist>
+        </div>
+
+        <!-- Unit -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Đơn Vị Tính / Quy Cách
+          </label>
+          <input 
+            type="text" 
+            name="unit" 
+            value="<%= typeof ingredient !== 'undefined' && ingredient.unit ? ingredient.unit : '' %>"
+            placeholder="Ví dụ: gram, kg, bó, chai 500ml..."
+            class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+          />
+        </div>
+
+        <!-- Image Upload & Preview -->
+        <div class="sm:col-span-2 space-y-3">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820]">
+            Hình Ảnh Nguyên Liệu (Tỉ lệ chuẩn 4:3)
+          </label>
+          
+          <div class="flex flex-col sm:flex-row items-start gap-6">
+            <div class="w-48 aspect-4-3 rounded-2xl overflow-hidden bg-[#FAF5EC] border border-[#E9E0D2] shrink-0 relative">
+              <% const initialImage = (typeof ingredient !== 'undefined' && ingredient.imagePath) ? getImageUrl(ingredient.imagePath) : '/images/placeholder.svg'; %>
+              <img 
+                id="ing-image-preview" 
+                src="<%= initialImage %>" 
+                alt="Xem trước hình ảnh" 
+                class="w-full h-full object-cover"
+                onerror="this.src='/images/placeholder.svg'"
+              />
+            </div>
+
+            <div class="flex-grow space-y-2">
+              <input 
+                type="file" 
+                name="image" 
+                accept="image/jpeg,image/png,image/webp"
+                onchange="previewImage(event, 'ing-image-preview')"
+                class="file-input file-input-bordered file-input-sm w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] rounded-xl text-sm"
+              />
+              <p class="text-xs text-[#7A7062]">
+                <% if (isEdit) { %>
+                  <span class="text-[#354B35] font-semibold">Ghi chú:</span> Giữ nguyên ảnh hiện tại nếu không chọn file mới.
+                <% } else { %>
+                  Hình ảnh sẽ được tải lên Supabase Storage bucket <code>dish-images</code> (thư mục <code>ingredients/</code>).
+                <% } %>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-[#292820] mb-2">
+            Mô Tả Nguồn Gốc & Cách Dùng
+          </label>
+          <textarea 
+            name="description" 
+            rows="4"
+            placeholder="Mô tả thổ nhưỡng, cách thu hoạch, đặc điểm nhận biết hoặc vai trò của nguyên liệu trong món ăn..."
+            class="textarea textarea-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm leading-relaxed"><%= typeof ingredient !== 'undefined' && ingredient.description ? ingredient.description : '' %></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-6 border-t border-[#E9E0D2]">
+        <a href="/admin/ingredients" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#292820] border border-[#E9E0D2] rounded-xl px-5 font-medium">
+          Hủy Bỏ
+        </a>
+        <button type="submit" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl px-7 font-medium shadow-xs">
+          <%= isEdit ? 'Lưu Thay Đổi' : 'Thêm Nguyên Liệu' %>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>

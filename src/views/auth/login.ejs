@@ -1,0 +1,107 @@
+<div class="max-w-md mx-auto px-4 py-16">
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl shadow-sm p-8">
+    <div class="text-center mb-8">
+      <div class="w-14 h-14 mx-auto rounded-full bg-[#354B35] flex items-center justify-center text-[#FFFDF8] font-serif font-bold text-2xl mb-4">
+        Ấ
+      </div>
+      <h1 class="font-serif text-3xl font-bold text-[#292820]">Đăng Nhập</h1>
+      <p class="text-sm text-[#7A7062] mt-2">Đăng nhập để xem thực đơn và bộ sưu tập đã lưu.</p>
+    </div>
+
+    <% if (typeof notice !== 'undefined' && notice) { %>
+      <div class="alert bg-[#EEF3EE] border border-[#C9D6C9] text-[#354B35] text-sm rounded-xl mb-5" role="status">
+        <%= notice %>
+      </div>
+    <% } %>
+
+    <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+      <div class="alert alert-error text-sm rounded-xl mb-5" role="alert">
+        <%= errorMessage %>
+      </div>
+    <% } %>
+
+    <% if (typeof retryAfterSeconds !== 'undefined' && retryAfterSeconds > 0) { %>
+      <div class="alert bg-[#FBEDE5] border border-[#E9C9B4] text-[#8A4A25] text-sm rounded-xl mb-5" role="status">
+        Thử lại sau <strong data-lock-countdown><%= retryAfterSeconds %></strong> giây.
+      </div>
+    <% } %>
+
+    <% if (!authConfigured) { %>
+      <div class="alert alert-warning text-sm rounded-xl mb-5">
+        Chưa cấu hình SUPABASE_URL / SUPABASE_ANON_KEY trong .env.
+      </div>
+    <% } %>
+
+    <form method="POST" action="/auth/login" class="space-y-4" data-auth-form data-lock-seconds="<%= retryAfterSeconds || 0 %>">
+      <input type="hidden" name="next" value="<%= next || '' %>">
+
+      <div>
+        <label for="email" class="block text-sm font-semibold text-[#354B35] mb-1.5">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email"
+          value="<%= email || '' %>"
+          class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+          placeholder="ban@example.com">
+        <% if (errors && errors.email) { %><p class="text-xs text-error mt-1"><%= errors.email %></p><% } %>
+      </div>
+
+      <div>
+        <label for="password" class="block text-sm font-semibold text-[#354B35] mb-1.5">Mật khẩu</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password"
+          class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+          placeholder="••••••••">
+        <% if (errors && errors.password) { %><p class="text-xs text-error mt-1"><%= errors.password %></p><% } %>
+      </div>
+
+      <% if (captchaRequired) { %>
+        <div class="rounded-xl border border-[#E9E0D2] bg-[#FAF5EC] p-3">
+          <% if (turnstileConfigured) { %>
+            <p class="text-xs text-[#7A7062] mb-2">Vì có nhiều lần đăng nhập thất bại, vui lòng xác minh CAPTCHA.</p>
+            <div class="cf-turnstile" data-sitekey="<%= turnstileSiteKey %>" data-theme="light"></div>
+            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+          <% } else { %>
+            <p class="text-xs text-[#8A4A25]">CAPTCHA chưa được cấu hình (chế độ phát triển: tạm bỏ qua).</p>
+          <% } %>
+        </div>
+      <% } %>
+
+      <button type="submit" data-auth-submit
+        class="btn w-full bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-semibold">
+        Đăng Nhập
+      </button>
+    </form>
+
+    <div class="flex items-center justify-between text-sm mt-5">
+      <a href="/auth/forgot-password" class="text-[#B86F45] hover:text-[#8A4A25] font-medium">Quên mật khẩu?</a>
+      <a href="/auth/register" class="text-[#354B35] hover:text-[#273727] font-semibold">Tạo tài khoản</a>
+    </div>
+
+    <p class="text-center text-xs text-[#7A7062] mt-6">
+      Chưa nhận được email xác minh?
+      <a href="/auth/verify" class="text-[#B86F45] hover:text-[#8A4A25] underline">Gửi lại mã</a>
+    </p>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var form = document.querySelector('[data-auth-form]');
+    if (!form) return;
+    var seconds = parseInt(form.getAttribute('data-lock-seconds'), 10) || 0;
+    var submit = form.querySelector('[data-auth-submit]');
+    var countdown = document.querySelector('[data-lock-countdown]');
+
+    if (seconds <= 0 || !submit) return;
+
+    submit.disabled = true;
+    var remaining = seconds;
+    var timer = window.setInterval(function () {
+      remaining -= 1;
+      if (countdown) countdown.textContent = String(Math.max(0, remaining));
+      if (remaining <= 0) {
+        window.clearInterval(timer);
+        submit.disabled = false;
+        if (countdown) countdown.textContent = '0';
+      }
+    }, 1000);
+  })();
+</script>

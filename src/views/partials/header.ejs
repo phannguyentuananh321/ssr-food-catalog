@@ -1,0 +1,136 @@
+<%
+  const loggedIn = typeof currentUser !== 'undefined' && currentUser;
+  const admin = typeof isAdmin !== 'undefined' && isAdmin;
+  const displayName = loggedIn ? (currentUser.username || currentUser.email || 'Tài khoản') : '';
+%>
+<header class="bg-[#FFFDF8] border-b border-[#E9E0D2] sticky top-0 z-50 shadow-xs">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-20">
+      <!-- Logo & Brand -->
+      <div class="flex items-center gap-3">
+        <a href="/dishes" class="flex items-center gap-3 group">
+          <div class="w-10 h-10 rounded-full bg-[#354B35] flex items-center justify-center text-[#FFFDF8] font-serif font-bold text-xl transition-transform group-hover:scale-105">
+            Ấ
+          </div>
+          <div>
+            <span class="font-serif text-2xl font-bold tracking-tight text-[#292820] group-hover:text-[#354B35] transition-colors">
+              Ấm Vị
+            </span>
+            <span class="block text-xs uppercase tracking-widest text-[#B86F45] font-semibold -mt-1">
+              Food Editorial
+            </span>
+          </div>
+        </a>
+      </div>
+
+      <% if (loggedIn) { %>
+        <!-- Desktop Navigation -->
+        <nav class="hidden md:flex items-center gap-1">
+          <a href="/dishes" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors <%= (typeof currentPath !== 'undefined' && (currentPath.startsWith('/dishes') && !currentPath.startsWith('/admin'))) ? 'bg-[#FAF5EC] text-[#354B35] font-bold shadow-xs' : 'text-[#292820] hover:text-[#354B35] hover:bg-[#FAF5EC]/60' %>">
+            Món Ăn
+          </a>
+          <a href="/chefs" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors <%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/chefs') && !currentPath.startsWith('/admin')) ? 'bg-[#FAF5EC] text-[#354B35] font-bold shadow-xs' : 'text-[#292820] hover:text-[#354B35] hover:bg-[#FAF5EC]/60' %>">
+            Đầu Bếp
+          </a>
+          <a href="/ingredients" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors <%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/ingredients') && !currentPath.startsWith('/admin')) ? 'bg-[#FAF5EC] text-[#354B35] font-bold shadow-xs' : 'text-[#292820] hover:text-[#354B35] hover:bg-[#FAF5EC]/60' %>">
+            Nguyên Liệu
+          </a>
+          <a href="/bookmarks" class="relative px-4 py-2 rounded-lg text-sm font-medium transition-colors <%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/bookmarks')) ? 'bg-[#FAF5EC] text-[#354B35] font-bold shadow-xs' : 'text-[#292820] hover:text-[#354B35] hover:bg-[#FAF5EC]/60' %>">
+            Đã Lưu
+            <span data-bookmark-count class="hidden ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-[#B86F45] text-[#FFFDF8] text-[10px] font-bold">0</span>
+          </a>
+        </nav>
+
+        <!-- Account / Admin Actions -->
+        <div class="hidden md:flex items-center gap-3">
+          <div class="dropdown dropdown-end">
+            <div tabindex="0" role="button" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] font-medium gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span class="max-w-40 truncate"><%= displayName %></span>
+            </div>
+            <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-[#FFFDF8] border border-[#E9E0D2] rounded-box w-64 z-50 mt-2 text-sm">
+              <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold">
+                <%= currentUser.email %>
+              </li>
+              <li><a href="/bookmarks">Đã Lưu</a></li>
+              <% if (admin) { %>
+                <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold mt-2">Quản trị</li>
+                <li>
+                  <a href="/admin/dishes" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/dishes')) ? 'active font-bold text-[#354B35]' : '' %>">
+                    🍳 Quản lý Món ăn
+                  </a>
+                </li>
+                <li>
+                  <a href="/admin/chefs" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/chefs')) ? 'active font-bold text-[#354B35]' : '' %>">
+                    👨‍🍳 Quản lý Đầu bếp
+                  </a>
+                </li>
+                <li>
+                  <a href="/admin/ingredients" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/ingredients')) ? 'active font-bold text-[#354B35]' : '' %>">
+                    🌿 Quản lý Nguyên liệu
+                  </a>
+                </li>
+              <% } %>
+              <li class="mt-2">
+                <form method="POST" action="/auth/logout">
+                  <button type="submit" class="w-full text-left text-[#B86F45]">Đăng xuất</button>
+                </form>
+              </li>
+            </ul>
+          </div>
+        </div>
+      <% } else { %>
+        <div class="hidden md:flex items-center gap-3">
+          <a href="/auth/login" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] font-medium">
+            Đăng Nhập
+          </a>
+          <a href="/auth/register" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none font-medium">
+            Đăng Ký
+          </a>
+        </div>
+      <% } %>
+
+      <!-- Mobile Hamburger Menu Button -->
+      <div class="flex items-center md:hidden">
+        <div class="dropdown dropdown-end">
+          <label tabindex="0" class="btn btn-ghost btn-circle text-[#292820]">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </label>
+          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-50 p-3 shadow-lg bg-[#FFFDF8] border border-[#E9E0D2] rounded-box w-64 space-y-1">
+            <% if (loggedIn) { %>
+              <li class="menu-title text-xs text-[#B86F45] uppercase font-bold truncate"><%= currentUser.email %></li>
+              <li class="menu-title text-xs text-[#B86F45] uppercase font-bold">Khám phá</li>
+              <li><a href="/dishes">Món Ăn</a></li>
+              <li><a href="/chefs">Đầu Bếp</a></li>
+              <li><a href="/ingredients">Nguyên Liệu</a></li>
+              <li>
+                <a href="/bookmarks" class="flex items-center justify-between">
+                  <span>Đã Lưu</span>
+                  <span data-bookmark-count class="hidden badge badge-sm bg-[#B86F45] text-[#FFFDF8] border-none">0</span>
+                </a>
+              </li>
+              <% if (admin) { %>
+                <li class="menu-title text-xs text-[#B86F45] uppercase font-bold mt-2">Quản trị</li>
+                <li><a href="/admin/dishes">Quản lý Món ăn</a></li>
+                <li><a href="/admin/chefs">Quản lý Đầu bếp</a></li>
+                <li><a href="/admin/ingredients">Quản lý Nguyên liệu</a></li>
+              <% } %>
+              <li class="mt-2">
+                <form method="POST" action="/auth/logout">
+                  <button type="submit" class="text-left text-[#B86F45]">Đăng xuất</button>
+                </form>
+              </li>
+            <% } else { %>
+              <li><a href="/auth/login">Đăng Nhập</a></li>
+              <li><a href="/auth/register">Đăng Ký</a></li>
+            <% } %>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>

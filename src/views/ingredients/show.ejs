@@ -1,0 +1,108 @@
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <div class="mb-6 flex items-center justify-between">
+    <a href="/ingredients" class="inline-flex items-center gap-2 text-sm font-medium text-[#7A7062] hover:text-[#354B35] transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+      Quay lại Danh Sách Nguyên Liệu
+    </a>
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        data-bookmark-btn
+        data-bookmark-type="ingredients"
+        data-bookmark-id="<%= ingredient.id %>"
+        aria-pressed="false"
+        aria-label="Lưu nguyên liệu <%= ingredient.name %>"
+        class="bookmark-btn bookmark-btn-lg"
+      >
+        <span class="bookmark-icon" aria-hidden="true">♡</span>
+        <span data-bookmark-label>Lưu</span>
+      </button>
+      <a href="/admin/ingredients/<%= ingredient.id %>/edit" class="btn btn-xs bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] rounded-lg">
+        ✎ Quản trị nguyên liệu này
+      </a>
+    </div>
+  </div>
+
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl overflow-hidden shadow-xs flex flex-col md:flex-row">
+    
+    <!-- Image: 4:3 Aspect Ratio in clean flex container -->
+    <div class="w-full md:w-1/2 bg-[#FAF5EC] relative flex-shrink-0 flex items-center justify-center overflow-hidden border-b md:border-b-0 md:border-r border-[#E9E0D2]">
+      <div class="w-full aspect-4-3 relative overflow-hidden">
+        <img 
+          src="<%= getImageUrl(ingredient.imagePath) %>" 
+          alt="<%= ingredient.name %>" 
+          class="w-full h-full object-cover block"
+          onerror="this.src='/images/placeholder.svg'"
+        />
+      </div>
+    </div>
+
+    <!-- Ingredient Info -->
+    <div class="w-full md:w-1/2 p-6 sm:p-10 lg:p-12 flex flex-col justify-between space-y-6">
+      <div>
+        <div class="flex items-center gap-2 mb-3">
+          <span class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[#354B35]/15 text-[#354B35]">
+            <%= ingredient.category || 'Gia vị truyền thống' %>
+          </span>
+          <% if (ingredient.unit) { %>
+            <span class="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FAF5EC] text-[#7A7062] border border-[#E9E0D2]">
+              Quy cách: <%= ingredient.unit %>
+            </span>
+          <% } %>
+        </div>
+
+        <h1 class="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#292820] leading-tight mb-4">
+          <%= ingredient.name %>
+        </h1>
+
+        <div class="w-16 h-1 bg-[#354B35] rounded-full mb-6"></div>
+
+        <div class="text-[#7A7062] leading-relaxed text-sm sm:text-base space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-[#292820]">
+            Đặc Tính & Nguồn Gốc
+          </h4>
+          <p>
+            <%= ingredient.description || 'Nguyên liệu nông sản, gia vị tinh tuyển đóng vai trò quan trọng trong việc tạo nên dấu ấn vị giác cho các món ăn.' %>
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-6 border-t border-[#E9E0D2] flex items-center justify-between text-xs text-[#7A7062]">
+        <span>Mã nguyên liệu: #ING-<%= ingredient.id %></span>
+        <span>Cập nhật: <%= new Date(ingredient.updatedAt).toLocaleDateString('vi-VN') %></span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Dishes that use this ingredient (from PostgreSQL) -->
+  <section class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-6 sm:p-8 shadow-xs mt-8">
+    <h2 class="font-serif text-xl font-bold text-[#292820] mb-4 flex items-center gap-2">
+      🍽 Món Ăn Sử Dụng Nguyên Liệu Này
+      <span class="text-xs font-sans font-semibold text-[#7A7062]">(<%= ingredient.dishes.length %>)</span>
+    </h2>
+    <% if (ingredient.dishes.length > 0) { %>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <% ingredient.dishes.forEach(row => { const dish = row.dish; %>
+          <a href="/dishes/<%= dish.id %>" class="group bg-[#FAF5EC] border border-[#E9E0D2] rounded-2xl overflow-hidden hover:border-[#354B35] transition-colors">
+            <div class="aspect-4-3 overflow-hidden bg-[#E9E0D2]">
+              <img src="<%= getImageUrl(dish.imagePath) %>" alt="<%= dish.name %>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='/images/placeholder.svg'" />
+            </div>
+            <div class="p-4">
+              <h3 class="font-bold text-sm text-[#292820] line-clamp-2 min-h-[2.5rem]"><%= dish.name %></h3>
+              <div class="mt-1 font-bold text-[#354B35] text-sm">
+                <%= dish.price ? Number(dish.price).toLocaleString('vi-VN') + ' ₫' : 'Liên hệ' %>
+              </div>
+            </div>
+          </a>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <p class="text-sm text-[#7A7062] py-6 text-center bg-[#FAF5EC] rounded-2xl border border-dashed border-[#E9E0D2]">
+        Nguyên liệu này chưa được dùng trong món ăn nào.
+      </p>
+    <% } %>
+  </section>
+</div>

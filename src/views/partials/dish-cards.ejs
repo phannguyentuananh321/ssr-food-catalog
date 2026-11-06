@@ -1,0 +1,3 @@
+<% (dishes || []).forEach((dish) => { %>
+  <%- include('./dish-card', { dish, getImageUrl }) %>
+<% }) %>

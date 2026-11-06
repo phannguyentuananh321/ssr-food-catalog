@@ -1,0 +1,13 @@
+<label class="text-xs font-bold uppercase tracking-wider text-[#7A7062] whitespace-nowrap" for="view-mode-select">
+  Chế độ xem
+</label>
+<select
+  id="view-mode-select"
+  name="mode"
+  class="select select-bordered select-sm bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+  onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"
+>
+  <option value="pages" <%= viewMode === 'pages' ? 'selected' : '' %>>Phân trang</option>
+  <option value="load-more" <%= viewMode === 'load-more' ? 'selected' : '' %>>Tải thêm</option>
+  <option value="infinite" <%= viewMode === 'infinite' ? 'selected' : '' %>>Cuộn vô hạn</option>
+</select>

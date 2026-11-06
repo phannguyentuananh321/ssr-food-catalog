@@ -1,0 +1,60 @@
+<article
+  data-bookmark-item
+  data-bookmark-item-type="ingredients"
+  data-bookmark-item-id="<%= ingredient.id %>"
+  class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group"
+>
+  <!-- Image: 4:3 Ratio -->
+  <div class="w-full aspect-4-3 overflow-hidden bg-[#FAF5EC] relative">
+    <img
+      src="<%= getImageUrl(ingredient.imagePath) %>"
+      alt="<%= ingredient.name %>"
+      loading="lazy"
+      class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+      onerror="this.src='/images/placeholder.svg'"
+    />
+    <button
+      type="button"
+      data-bookmark-btn
+      data-bookmark-type="ingredients"
+      data-bookmark-id="<%= ingredient.id %>"
+      aria-pressed="false"
+      aria-label="Lưu nguyên liệu <%= ingredient.name %>"
+      class="bookmark-btn absolute top-3 right-3 z-10"
+    >
+      <span class="bookmark-icon" aria-hidden="true">♡</span>
+      <span data-bookmark-label>Lưu</span>
+    </button>
+  </div>
+
+  <div class="p-6 flex flex-col flex-grow justify-between">
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="inline-block text-xs font-semibold text-[#B86F45] uppercase tracking-wider">
+          <%= ingredient.category || 'Gia vị' %>
+        </span>
+        <% if (ingredient.unit) { %>
+          <span class="text-xs text-[#7A7062] bg-[#FAF5EC] px-2 py-0.5 rounded border border-[#E9E0D2]">
+            Đơn vị: <%= ingredient.unit %>
+          </span>
+        <% } %>
+      </div>
+
+      <h3 class="font-serif text-xl font-bold text-[#292820] group-hover:text-[#354B35] transition-colors">
+        <a href="/ingredients/<%= ingredient.id %>">
+          <%= ingredient.name %>
+        </a>
+      </h3>
+
+      <p class="text-sm text-[#7A7062] line-clamp-3 leading-relaxed mt-2">
+        <%= ingredient.description || 'Nguyên liệu tự nhiên chất lượng cao, đem lại chiều sâu hương vị cho món ăn.' %>
+      </p>
+    </div>
+
+    <div class="pt-5 mt-4 border-t border-[#E9E0D2]">
+      <a href="/ingredients/<%= ingredient.id %>" class="btn btn-sm w-full bg-[#FAF5EC] hover:bg-[#354B35] text-[#354B35] hover:text-[#FFFDF8] border border-[#E9E0D2] rounded-xl font-medium transition-colors">
+        Xem Chi Tiết Nguyên Liệu »
+      </a>
+    </div>
+  </div>
+</article>

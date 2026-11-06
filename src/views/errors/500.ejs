@@ -1,0 +1,16 @@
+<div class="max-w-3xl mx-auto px-4 py-20 text-center">
+  <div class="w-20 h-20 mx-auto rounded-full bg-[#B86F45]/10 border-2 border-[#B86F45]/30 flex items-center justify-center text-[#985732] font-serif font-bold text-3xl mb-6 shadow-xs">
+    500
+  </div>
+  <h1 class="font-serif text-3xl sm:text-4xl font-bold text-[#292820] mb-4">
+    Đã Xảy Ra Lỗi Hệ Thống
+  </h1>
+  <p class="text-[#7A7062] max-w-md mx-auto mb-8 text-base leading-relaxed">
+    <%= typeof message !== 'undefined' ? message : 'Máy chủ đang gặp sự cố tạm thời khi xử lý yêu cầu. Vui lòng thử lại sau giây lát.' %>
+  </p>
+  <div class="flex items-center justify-center gap-4">
+    <a href="/dishes" class="btn bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none px-6 rounded-xl font-medium">
+      Về Trang Chủ
+    </a>
+  </div>
+</div>

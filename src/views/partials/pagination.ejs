@@ -1,0 +1,53 @@
+<% if (typeof pagination !== 'undefined' && pagination.totalPages > 1) { %>
+  <div class="flex flex-col sm:flex-row items-center justify-between gap-4 py-8 border-t border-[#E9E0D2] mt-8">
+    <div class="text-xs sm:text-sm text-[#7A7062]">
+      Hiển thị <span class="font-semibold text-[#292820]"><%= ((pagination.page - 1) * pagination.limit) + 1 %></span> - 
+      <span class="font-semibold text-[#292820]"><%= Math.min(pagination.page * pagination.limit, pagination.totalItems) %></span> trong 
+      <span class="font-semibold text-[#292820]"><%= pagination.totalItems %></span> kết quả
+    </div>
+
+    <% 
+      // Helper function to build pagination url while retaining query params
+      const getPageUrl = (targetPage) => {
+        const params = new URLSearchParams(typeof queryParams !== 'undefined' ? queryParams : {});
+        params.set('page', targetPage);
+        return '?' + params.toString();
+      };
+    %>
+
+    <div class="join shadow-xs bg-[#FFFDF8] border border-[#E9E0D2] rounded-xl overflow-hidden">
+      <!-- Previous Button -->
+      <% if (pagination.hasPrev) { %>
+        <a href="<%= getPageUrl(pagination.prevPage) %>" class="join-item btn btn-sm bg-[#FFFDF8] hover:bg-[#FAF5EC] border-none text-[#292820]">
+          « Trước
+        </a>
+      <% } else { %>
+        <button class="join-item btn btn-sm bg-[#FFFDF8] border-none text-[#C4BCB0] cursor-not-allowed" disabled>
+          « Trước
+        </button>
+      <% } %>
+
+      <!-- Page Numbers -->
+      <% 
+        const startPage = Math.max(1, pagination.page - 2);
+        const endPage = Math.min(pagination.totalPages, pagination.page + 2);
+        for (let i = startPage; i <= endPage; i++) { 
+      %>
+        <a href="<%= getPageUrl(i) %>" class="join-item btn btn-sm border-none <%= i === pagination.page ? 'bg-[#354B35] text-[#FFFDF8] hover:bg-[#273727] font-bold' : 'bg-[#FFFDF8] hover:bg-[#FAF5EC] text-[#292820]' %>">
+          <%= i %>
+        </a>
+      <% } %>
+
+      <!-- Next Button -->
+      <% if (pagination.hasNext) { %>
+        <a href="<%= getPageUrl(pagination.nextPage) %>" class="join-item btn btn-sm bg-[#FFFDF8] hover:bg-[#FAF5EC] border-none text-[#292820]">
+          Sau »
+        </a>
+      <% } else { %>
+        <button class="join-item btn btn-sm bg-[#FFFDF8] border-none text-[#C4BCB0] cursor-not-allowed" disabled>
+          Sau »
+        </button>
+      <% } %>
+    </div>
+  </div>
+<% } %>

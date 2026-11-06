@@ -1,0 +1,54 @@
+<div class="max-w-md mx-auto px-4 py-16">
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl shadow-sm p-8">
+    <div class="text-center mb-8">
+      <div class="w-14 h-14 mx-auto rounded-full bg-[#B86F45] flex items-center justify-center text-[#FFFDF8] text-2xl mb-4">
+        ✉
+      </div>
+      <h1 class="font-serif text-3xl font-bold text-[#292820]">Xác Minh Email</h1>
+      <p class="text-sm text-[#7A7062] mt-2">Nhập mã trong email, hoặc mở liên kết xác minh đã được gửi.</p>
+    </div>
+
+    <% if (typeof notice !== 'undefined' && notice) { %>
+      <div class="alert bg-[#EEF3EE] border border-[#C9D6C9] text-[#354B35] text-sm rounded-xl mb-5" role="status"><%= notice %></div>
+    <% } %>
+
+    <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+      <div class="alert alert-error text-sm rounded-xl mb-5" role="alert"><%= errorMessage %></div>
+    <% } %>
+
+    <form method="POST" action="/auth/verify" class="space-y-4">
+      <div>
+        <label for="email" class="block text-sm font-semibold text-[#354B35] mb-1.5">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email"
+          value="<%= email || '' %>"
+          class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
+          placeholder="ban@example.com">
+        <% if (errors && errors.email) { %><p class="text-xs text-error mt-1"><%= errors.email %></p><% } %>
+      </div>
+
+      <div>
+        <label for="token" class="block text-sm font-semibold text-[#354B35] mb-1.5">Mã xác minh (OTP)</label>
+        <input id="token" name="token" type="text" required inputmode="numeric" autocomplete="one-time-code"
+          class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm tracking-widest"
+          placeholder="Nhập mã trong email">
+        <% if (errors && errors.token) { %><p class="text-xs text-error mt-1"><%= errors.token %></p><% } %>
+      </div>
+
+      <button type="submit"
+        class="btn w-full bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-semibold">
+        Xác Minh
+      </button>
+    </form>
+
+    <form method="POST" action="/auth/resend-verification" class="mt-5">
+      <input type="hidden" name="email" value="<%= email || '' %>">
+      <button type="submit" class="btn btn-ghost w-full text-[#B86F45] hover:text-[#8A4A25] text-sm">
+        Gửi lại email xác minh
+      </button>
+    </form>
+
+    <p class="text-center text-sm text-[#7A7062] mt-4">
+      <a href="/auth/login" class="text-[#354B35] hover:text-[#273727] font-semibold">Quay lại đăng nhập</a>
+    </p>
+  </div>
+</div>
