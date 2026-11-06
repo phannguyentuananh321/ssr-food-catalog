@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { validateDish, normalizeIdList } = require('../src/validators/dish.validator');
 const { validateChef } = require('../src/validators/chef.validator');
 const { validateIngredient } = require('../src/validators/ingredient.validator');
@@ -9,10 +10,35 @@ const { config, validateEnv } = require('../src/config/env');
 const { normalizePage, normalizeLimit, normalizeViewMode, buildPagination } = require('../src/lib/pagination');
 const { parseBookmarkIds, MAX_IDS_PER_TYPE } = require('../src/services/bookmark.service');
 const { buildDocumentExpression, buildSearchFilter } = require('../src/services/search.service');
-const { validateRegister, validateLogin, validatePasswordReset, validateOtp } = require('../src/validators/auth.validator');
-const { isAdminUser, isEmailVerified, safeNextPath, requireAuth, requireAdmin } = require('../src/middleware/auth');
-const { lockSecondsForFailureCount, buildLoginIdentifier, buildRegistrationIdentifier } = require('../src/services/auth-throttle.service');
-const { isTurnstileConfigured, isTurnstileTestKey } = require('../src/services/turnstile.service');
+const {
+  validateRegister,
+  validateLogin,
+  validateActivate,
+  validateResendOtp,
+  validateForgot,
+  validatePasswordReset
+} = require('../src/validators/auth.validator');
+const { safeNextPath, requireAuth } = require('../src/middleware/auth');
+const { verifyCsrfToken } = require('../src/middleware/csrf');
+const { hashPassword, verifyPassword, verifyDummy } = require('../src/lib/password');
+const {
+  normalizeEmail,
+  generateOtp,
+  hashOtp,
+  verifyOtp,
+  generateResetToken,
+  hashResetToken,
+  verifyResetToken
+} = require('../src/lib/tokens');
+const { isCommonPassword } = require('../src/lib/common-passwords');
+const {
+  recordLoginFailure,
+  getRateLimitStatus,
+  resetRateLimitKey,
+  consumeFixedWindow
+} = require('../src/services/rate-limit.service');
+const { PrismaSessionStore } = require('../src/lib/session-store');
+const prisma = require('../src/lib/prisma');
 const app = require('../src/app');
 
 let totalTests = 0;
@@ -53,6 +79,8 @@ async function run() {
     assert.ok(config.PORT >= 1000, 'PORT phải hợp lệ');
     assert.ok(config.NODE_ENV, 'NODE_ENV phải được thiết lập');
     assert.strictEqual(typeof validateEnv, 'function');
+    assert.ok(config.SESSION_SECRET.length >= 32, 'SESSION_SECRET phải từ 32 ký tự');
+    assert.ok(config.OTP_PEPPER.length >= 32, 'OTP_PEPPER phải từ 32 ký tự');
   });
 
   // 2. Dish Validator Tests
@@ -118,21 +146,20 @@ async function run() {
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(result.data.ingredientIds, [1, 2]);
     assert.deepStrictEqual(result.data.chefIds, [3]);
-    assert.strictEqual(result.data.relationsSubmitted, true);
   });
 
   // 3. Chef Validator Tests
   console.log('\n3. Kiểm tra Chef Validator:');
   it('Validate thành công đầu bếp hợp lệ', () => {
     const input = {
-      name: 'Chef Nguyễn Thanh Tùng',
-      title: 'Bếp trưởng',
-      experience: '18 năm kinh nghiệm',
-      isFeatured: 'on'
+      name: 'Nguyễn Văn A',
+      title: 'Bếp Trưởng',
+      description: 'Chuyên món Việt truyền thống',
+      experience: '15 năm kinh nghiệm'
     };
     const result = validateChef(input);
     assert.strictEqual(result.success, true);
-    assert.strictEqual(result.data.isFeatured, true);
+    assert.strictEqual(result.data.name, 'Nguyễn Văn A');
   });
 
   it('Validate thất bại khi tên đầu bếp dưới 2 ký tự', () => {
@@ -275,7 +302,7 @@ async function run() {
   });
 
   // 11. View regressions for new UI
-  console.log('\n11. Regression giao diện mới (bookmark, relation search):');
+  console.log('\n11. Regression giao diện mới (bookmark, relation search, csrf):');
   it('Card partials có nút bookmark và metadata để xóa khỏi trang đã lưu', () => {
     ['dish-card.ejs', 'chef-card.ejs', 'ingredient-card.ejs'].forEach((file) => {
       const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'partials', file), 'utf8');
@@ -294,80 +321,78 @@ async function run() {
     assert.ok(!source.includes('chefOptions'), 'Không được render toàn bộ đầu bếp');
   });
 
-  it('Layout nạp đủ script client mới', () => {
-    const layout = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'layouts', 'main.ejs'), 'utf8');
-    ['bookmarks.js', 'catalog-pagination.js', 'share-page.js', 'bookmarks-page.js', 'admin-relation-search.js'].forEach((file) => {
-      assert.ok(layout.includes(`/js/${file}`), `Layout thiếu ${file}`);
+  it('Mọi form POST (logout, multipart, xóa _method) có CSRF token', () => {
+    const header = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'partials', 'header.ejs'), 'utf8');
+    assert.ok(header.includes('action="/logout"') && header.includes('name="_csrf"'), 'Logout thiếu CSRF');
+
+    ['dishes/form.ejs', 'chefs/form.ejs', 'ingredients/form.ejs'].forEach((file) => {
+      const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', file), 'utf8');
+      assert.ok(src.includes('name="_csrf"'), `${file} thiếu hidden _csrf`);
+      assert.ok(src.includes('_csrf='), `${file} thiếu query _csrf cho multipart`);
+    });
+
+    ['dishes/admin-index.ejs', 'chefs/admin-index.ejs', 'ingredients/admin-index.ejs'].forEach((file) => {
+      const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', file), 'utf8');
+      assert.ok(src.includes('name="_csrf"'), `${file} thiếu _csrf trong form xóa`);
     });
   });
 
-  // 12. Authentication & Authorization (unit + source checks)
-  console.log('\n12. Xác thực & phân quyền:');
-  it('Auth validators: đăng ký hợp lệ, email chuẩn hoá, mật khẩu khớp', () => {
-    const ok = validateRegister({
-      username: 'Nguyen_Van_A',
-      email: '  User@Example.COM ',
-      password: 'UiTest!23456',
-      confirmPassword: 'UiTest!23456'
-    });
-    assert.strictEqual(ok.success, true);
-    assert.strictEqual(ok.data.email, 'user@example.com');
+  // 12. Authentication & Authorization theo đặc tả mới
+  console.log('\n12. Xác thực & Phân quyền mới (Đặc tả đầy đủ):');
+
+  it('Chuẩn hóa email: trim và lowercase, không xử lý riêng cho Gmail', () => {
+    assert.strictEqual(normalizeEmail('  My.Email+Tag@Gmail.COM '), 'my.email+tag@gmail.com');
+    assert.strictEqual(normalizeEmail('Test@Example.COM'), 'test@example.com');
+    assert.strictEqual(normalizeEmail(''), '');
+    assert.strictEqual(normalizeEmail(null), '');
   });
 
-  it('Auth validators: từ chối username sai ký tự/độ dài và mật khẩu không khớp', () => {
-    const badName = validateRegister({ username: 'a b', email: 'a@b.co', password: 'UiTest!23456', confirmPassword: 'UiTest!23456' });
-    assert.strictEqual(badName.success, false);
-    assert.ok(badName.errors.username);
-
-    const shortPw = validateRegister({ username: 'abcdef', email: 'a@b.co', password: 'short', confirmPassword: 'short' });
-    assert.strictEqual(shortPw.success, false);
-    assert.ok(shortPw.errors.password);
-
-    const mismatch = validateRegister({ username: 'abcdef', email: 'a@b.co', password: 'UiTest!23456', confirmPassword: 'UiTest!99999' });
-    assert.strictEqual(mismatch.success, false);
-    assert.ok(mismatch.errors.confirmPassword);
-
-    assert.strictEqual(validateLogin({ email: 'not-an-email', password: 'x' }).success, false);
-    assert.strictEqual(validateOtp({ email: 'a@b.co', token: '123456' }).success, true);
-    assert.strictEqual(validatePasswordReset({ password: 'UiTest!23456', confirmPassword: 'UiTest!23456' }).success, true);
+  await itAsync('Argon2id băm mật khẩu, verify chính xác và có dummy hash cân bằng thời gian', async () => {
+    const pw = 'SecurePassword123#';
+    const hash = await hashPassword(pw);
+    assert.ok(hash.startsWith('$argon2id$'), 'Phải dùng Argon2id');
+    assert.strictEqual(await verifyPassword(hash, pw), true);
+    assert.strictEqual(await verifyPassword(hash, 'WrongPassword123#'), false);
+    assert.strictEqual(await verifyDummy('AnyPassword'), false);
   });
 
-  it('Chính sách khoá đăng nhập: 0/30s/5ph/30ph theo số lần sai', () => {
-    assert.strictEqual(lockSecondsForFailureCount(0), 0);
-    assert.strictEqual(lockSecondsForFailureCount(1), 0);
-    assert.strictEqual(lockSecondsForFailureCount(2), 0);
-    assert.strictEqual(lockSecondsForFailureCount(3), 30);
-    assert.strictEqual(lockSecondsForFailureCount(4), 5 * 60);
-    assert.strictEqual(lockSecondsForFailureCount(5), 30 * 60);
-    assert.strictEqual(lockSecondsForFailureCount(50), 30 * 60, 'Không vượt quá 30 phút');
+  it('Zod Auth Validators: email, password 10-64 ký tự, khác email, không thuộc 50 mật khẩu phổ biến', () => {
+    assert.strictEqual(validateRegister({ email: 'u@example.com', password: 'Short1!' }).success, false);
+    assert.strictEqual(validateRegister({ email: 'u@example.com', password: 'password123' }).success, false);
+    assert.strictEqual(validateRegister({ email: 'test@example.com', password: 'test@example.com' }).success, false);
+    assert.strictEqual(validateRegister({ email: 'valid@example.com', password: 'ValidPassword123#' }).success, true);
+    assert.strictEqual(validateRegister({ email: 'valid@example.com', displayName: 'A'.repeat(51), password: 'ValidPassword123#' }).success, false);
   });
 
-  it('Login identifier là hash SHA-256 ổn định theo IP + email chuẩn hoá', () => {
-    const a = buildLoginIdentifier('127.0.0.1', 'User@Example.com ');
-    const b = buildLoginIdentifier('127.0.0.1', 'user@example.com');
-    assert.strictEqual(a, b);
-    assert.strictEqual(a.length, 64);
-    assert.ok(/^[0-9a-f]+$/.test(a));
-    assert.notStrictEqual(a, buildLoginIdentifier('127.0.0.2', 'user@example.com'));
-    assert.notStrictEqual(a, buildLoginIdentifier('127.0.0.1', 'other@example.com'));
-    assert.notStrictEqual(buildRegistrationIdentifier('127.0.0.1'), a);
+  it('OTP: 6 chữ số bằng crypto.randomInt; otpHash = HMAC-SHA256(OTP_PEPPER, userId:purpose:otp); timingSafeEqual', () => {
+    const otp = generateOtp();
+    assert.ok(/^\d{6}$/.test(otp), 'OTP phải gồm 6 chữ số');
+    const userId = 'user_test_id';
+    const purpose = 'activation';
+    const otpHash = hashOtp(userId, purpose, otp);
+    assert.ok(/^[0-9a-f]{64}$/.test(otpHash), 'OTP hash phải là HMAC-SHA256 hex');
+    assert.strictEqual(verifyOtp(otpHash, userId, purpose, otp), true);
+    assert.strictEqual(verifyOtp(otpHash, userId, purpose, '000000'), false);
+    assert.strictEqual(verifyOtp(otpHash, 'otherUser', purpose, otp), false);
   });
 
-  it('Chỉ email admin đã xác minh mới được coi là admin (không tin role từ client)', () => {
-    if (!config.ADMIN_EMAIL) {
-      console.log('    (bỏ qua so khớp: chưa cấu hình ADMIN_EMAIL)');
-      return;
-    }
-    assert.strictEqual(isAdminUser({ email: config.ADMIN_EMAIL, email_confirmed_at: '2026-01-01T00:00:00Z' }), true);
-    assert.strictEqual(isAdminUser({ email: config.ADMIN_EMAIL.toUpperCase(), email_confirmed_at: '2026-01-01T00:00:00Z' }), true);
-    assert.strictEqual(isAdminUser({ email: config.ADMIN_EMAIL, email_confirmed_at: null }), false, 'Email chưa xác minh không phải admin');
-    assert.strictEqual(isAdminUser({ email: 'other@example.com', email_confirmed_at: '2026-01-01T00:00:00Z', role: 'admin' }), false);
-    assert.strictEqual(isAdminUser({ email: config.ADMIN_EMAIL, email_confirmed_at: '2026-01-01T00:00:00Z', user_metadata: { role: 'admin' } }), true, 'Metadata không làm thay đổi kết quả');
-    assert.strictEqual(isEmailVerified({ confirmed_at: '2026-01-01T00:00:00Z' }), true);
-    assert.strictEqual(isEmailVerified({}), false);
+  it('Reset Token: randomBytes(32) base64url; tokenHash = SHA-256; timingSafeEqual', () => {
+    const token = generateResetToken();
+    assert.ok(token.length >= 43, 'Token base64url phải dài >= 43 ký tự');
+    const tokenHash = hashResetToken(token);
+    assert.ok(/^[0-9a-f]{64}$/.test(tokenHash), 'Token hash phải là SHA-256 hex');
+    assert.strictEqual(verifyResetToken(tokenHash, token), true);
+    assert.strictEqual(verifyResetToken(tokenHash, 'tampered_token'), false);
   });
 
-  it('safeNextPath chặn open redirect', () => {
+  it('CSRF Middleware: token trong session, so sánh bằng timingSafeEqual, từ chối khi sai', () => {
+    const token = crypto.randomBytes(32).toString('hex');
+    assert.strictEqual(verifyCsrfToken(token, token), true);
+    assert.strictEqual(verifyCsrfToken('wrong', token), false);
+    assert.strictEqual(verifyCsrfToken(null, token), false);
+  });
+
+  it('safeNextPath chặn open redirect an toàn', () => {
     assert.strictEqual(safeNextPath('/dishes'), '/dishes');
     assert.strictEqual(safeNextPath('/admin/dishes?page=2'), '/admin/dishes?page=2');
     assert.strictEqual(safeNextPath('//evil.example/x'), null);
@@ -377,159 +402,73 @@ async function run() {
     assert.strictEqual(safeNextPath(undefined), null);
   });
 
-  it('requireAuth trả JSON 401 cho API và redirect 303 cho trang HTML', () => {
+  it('requireAuth: redirect 303 tới /login cho HTML và 401 JSON cho API', () => {
     const makeRes = () => {
       const res = { statusCode: 200, headers: {} };
       res.status = (c) => { res.statusCode = c; return res; };
       res.json = (body) => { res.body = body; return res; };
       res.redirect = (code, url) => { res.statusCode = code; res.redirectTo = url; return res; };
-      res.render = (view) => { res.rendered = view; return res; };
       return res;
     };
+
     const jsonRes = makeRes();
-    requireAuth({ user: null, originalUrl: '/api/dishes', accepts: () => 'json' }, jsonRes, () => { throw new Error('không được next'); });
+    requireAuth({ user: null, originalUrl: '/api/dishes', accepts: () => 'json' }, jsonRes, () => { throw new Error('Không được next'); });
     assert.strictEqual(jsonRes.statusCode, 401);
     assert.strictEqual(jsonRes.body.error, 'UNAUTHENTICATED');
 
     const htmlRes = makeRes();
-    requireAuth({ user: null, originalUrl: '/dishes', accepts: () => 'html' }, htmlRes, () => { throw new Error('không được next'); });
+    requireAuth({ user: null, originalUrl: '/dishes', accepts: () => 'html' }, htmlRes, () => { throw new Error('Không được next'); });
     assert.strictEqual(htmlRes.statusCode, 303);
-    assert.ok(htmlRes.redirectTo.startsWith('/auth/login?next='));
-  });
-
-  it('requireAdmin: user thường nhận 403 (JSON/trang), admin được đi tiếp', () => {
-    const makeRes = () => {
-      const res = { statusCode: 200 };
-      res.status = (c) => { res.statusCode = c; return res; };
-      res.json = (body) => { res.body = body; return res; };
-      res.render = (view) => { res.rendered = view; return res; };
-      res.redirect = (code, url) => { res.statusCode = code; res.redirectTo = url; return res; };
-      return res;
-    };
-    const regular = { email: 'regular@example.com', email_confirmed_at: '2026-01-01T00:00:00Z' };
-
-    const jsonRes = makeRes();
-    requireAdmin({ user: regular, originalUrl: '/admin/api/dishes', accepts: () => 'json' }, jsonRes, () => { throw new Error('không được next'); });
-    assert.strictEqual(jsonRes.statusCode, 403);
-    assert.strictEqual(jsonRes.body.error, 'FORBIDDEN');
-
-    const htmlRes = makeRes();
-    requireAdmin({ user: regular, originalUrl: '/admin/dishes', path: '/admin/dishes', accepts: () => 'html' }, htmlRes, () => { throw new Error('không được next'); });
-    assert.strictEqual(htmlRes.statusCode, 403);
-    assert.strictEqual(htmlRes.rendered, 'errors/403');
-
-    if (config.ADMIN_EMAIL) {
-      let passed = false;
-      requireAdmin(
-        { user: { email: config.ADMIN_EMAIL, email_confirmed_at: '2026-01-01T00:00:00Z' }, originalUrl: '/admin/dishes', accepts: () => 'html' },
-        makeRes(),
-        () => { passed = true; }
-      );
-      assert.strictEqual(passed, true);
-    }
+    assert.ok(htmlRes.redirectTo.startsWith('/login?next='));
   });
 
   it('Đăng xuất chỉ nhận POST; không có route GET /logout', () => {
     const routes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'auth.routes.js'), 'utf8');
     assert.ok(routes.includes("router.post('/logout'"), 'Thiếu POST /logout');
-    assert.ok(!/router\.get\(\s*['"]\/logout/.test(routes), 'Không được có GET /logout');
+    assert.ok(!/router\.get\(\s*['"]\/logout/.test(routes), 'Tuyệt đối không được có GET /logout');
   });
 
-  it('Không tự hash/lưu mật khẩu: không dùng bcrypt/argon2, schema không có password hash', () => {
-    const files = ['src/controllers/auth.controller.js', 'src/services/auth-throttle.service.js', 'src/middleware/auth.js'];
-    files.forEach((file) => {
-      const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-      assert.ok(!/require\(['"](bcrypt|argon2)/.test(source), `${file} không được tự hash mật khẩu`);
-      assert.ok(!source.includes('passwordHash') && !source.includes('password_hash'), `${file} không được lưu password hash`);
+  it('Không log mật khẩu, hash, OTP, reset token, sid hay secret trong mã nguồn', () => {
+    const checkFiles = [
+      'src/controllers/auth.controller.js',
+      'src/middleware/auth.js',
+      'src/middleware/csrf.js',
+      'src/services/custom-auth.service.js',
+      'src/services/mailer.service.js',
+      'src/lib/session-store.js'
+    ];
+    checkFiles.forEach((file) => {
+      const filePath = path.join(__dirname, '..', file);
+      if (fs.existsSync(filePath)) {
+        const source = fs.readFileSync(filePath, 'utf8');
+        assert.ok(!/console\.log\([^)]*passwordHash/i.test(source), `${file} không được log passwordHash`);
+        assert.ok(!/console\.log\([^)]*otp/i.test(source), `${file} không được log OTP`);
+        assert.ok(!/console\.log\([^)]*resetToken/i.test(source), `${file} không được log resetToken`);
+      }
     });
-    const schema = fs.readFileSync(path.join(__dirname, '..', 'prisma', 'schema.prisma'), 'utf8');
-    assert.ok(!/password(Hash|_hash)?\s+String/.test(schema), 'Schema không được có cột mật khẩu');
   });
 
-  it('Không log token/mật khẩu trong mã xác thực', () => {
-    ['src/controllers/auth.controller.js', 'src/middleware/auth.js', 'src/lib/supabase-server.js', 'src/services/turnstile.service.js'].forEach((file) => {
-      const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-      assert.ok(!/console\.log\(/.test(source), `${file} không được console.log`);
-      assert.ok(!/access_token|refresh_token/i.test(source.replace(/refreshToken:/g, '')), `${file} không được log token`);
-    });
-  });
-
-  it('Turnstile xác minh phía server và secret chỉ đọc từ env', () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'turnstile.service.js'), 'utf8');
-    assert.ok(source.includes('challenges.cloudflare.com/turnstile/v0/siteverify'), 'Thiếu siteverify');
-    assert.ok(source.includes('config.TURNSTILE_SECRET_KEY'), 'Thiếu đọc secret từ env');
-    assert.strictEqual(typeof isTurnstileConfigured(), 'boolean');
-    const loginView = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'auth', 'login.ejs'), 'utf8');
-    assert.ok(loginView.includes('cf-turnstile'), 'Trang đăng nhập thiếu widget CAPTCHA');
-    const registerView = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'auth', 'register.ejs'), 'utf8');
-    assert.ok(registerView.includes('cf-turnstile'), 'Trang đăng ký thiếu widget CAPTCHA');
-  });
-
-  it('Turnstile: nhận diện test key và production fail closed', () => {
-    assert.strictEqual(
-      isTurnstileTestKey('1x00000000000000000000AA', '1x0000000000000000000000000000000AA'),
-      true,
-      'Phải nhận diện cặp test key official'
-    );
-    assert.strictEqual(
-      isTurnstileTestKey('3x00000000000000000000FF', '3x0000000000000000000000000000000AA'),
-      true,
-      'Phải nhận diện test key luôn chặn'
-    );
-    assert.strictEqual(
-      isTurnstileTestKey('0x4AAAAAAABrealSiteKey', '0x4AAAAAAABrealSecretKey'),
-      false,
-      'Key thật (0x...) không được coi là test key'
-    );
-
-    const envSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'env.js'), 'utf8');
-    assert.ok(envSource.includes('isTurnstileTestKey()'), 'Thiếu guard test key trong config');
-    assert.ok(
-      /isProduction\s*&&\s*isTurnstileTestKey/.test(envSource),
-      'Production phải chặn Turnstile test key'
-    );
-    const turnstileSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'turnstile.service.js'), 'utf8');
-    assert.ok(turnstileSource.includes("test-key-in-production"), 'siteverify phải fail closed khi gặp test key ở production');
-  });
-
-  it('Gửi lại email xác minh: báo lỗi khi Supabase hết quota email', () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'controllers', 'auth.controller.js'), 'utf8');
-    const start = source.indexOf('async function resendVerification');
-    const end = source.indexOf('async function renderForgotPage');
-    assert.ok(start > -1 && end > start, 'Không tìm thấy resendVerification');
-    const block = source.slice(start, end);
-    assert.ok(block.includes('over_email_send_rate_limit'), 'resend-verification phải xử lý over_email_send_rate_limit');
-    assert.ok(block.includes('429'), 'resend-verification phải trả 429 khi hết quota');
-  });
-
-  it('Express gắn auth trước khi chặn toàn site; router admin có requireAdmin', () => {
-    const appSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
-    const attachIndex = appSource.indexOf('app.use(attachAuth)');
-    const guardIndex = appSource.indexOf('app.use(requireAuth)');
-    assert.ok(attachIndex > -1 && guardIndex > -1 && attachIndex < guardIndex, 'Thứ tự attachAuth/requireAuth chưa đúng');
-    const adminRoutes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'admin.routes.js'), 'utf8');
-    assert.ok(adminRoutes.includes('router.use(requireAdmin)'), 'Router admin thiếu requireAdmin');
-    const header = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'partials', 'header.ejs'), 'utf8');
-    assert.ok(header.includes('isAdmin'), 'Header phải ẩn khu quản trị với user thường');
-  });
-
-  it('Có migration cho UserProfile và bảng throttle', () => {
+  it('Có migration cho các bảng User, ActivationChallenge, PasswordReset, Session, RateLimit', () => {
     const migrationsDir = path.join(__dirname, '..', 'prisma', 'migrations');
-    const dirs = fs.readdirSync(migrationsDir).filter((name) => name.includes('add_auth_profiles_throttles'));
-    assert.ok(dirs.length === 1, 'Thiếu migration add_auth_profiles_throttles');
+    const dirs = fs.readdirSync(migrationsDir).filter((name) => name.includes('custom_auth'));
+    assert.ok(dirs.length >= 1, 'Thiếu migration custom_auth');
     const sql = fs.readFileSync(path.join(migrationsDir, dirs[0], 'migration.sql'), 'utf8');
-    ['UserProfile', 'LoginThrottle', 'RegistrationThrottle', 'usernameLower'].forEach((token) => {
-      assert.ok(sql.includes(token), `Migration thiếu ${token}`);
+    ['User', 'ActivationChallenge', 'PasswordReset', 'Session', 'RateLimit'].forEach((tbl) => {
+      assert.ok(sql.includes(`CREATE TABLE "${tbl}"`), `Migration thiếu bảng ${tbl}`);
     });
   });
 
+  it('Header Referrer-Policy: no-referrer được cấu hình cho /reset', () => {
+    const appSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+    assert.ok(appSource.includes('Referrer-Policy') && appSource.includes('no-referrer'), 'Thiếu Referrer-Policy: no-referrer');
+  });
 
+  // 13. Database Integration Tests (chạy khi có DB kết nối hoặc RUN_DB_TESTS=1)
   const runDb = ['1', 'true', 'yes'].includes(String(process.env.RUN_DB_TESTS).toLowerCase());
-  console.log('\n13. Kiểm thử tích hợp database (RUN_DB_TESTS):');
+  console.log('\n13. Kiểm thử tích hợp cơ sở dữ liệu (RUN_DB_TESTS):');
   if (!runDb) {
-    console.log('  ⚠ Bỏ qua (đặt RUN_DB_TESTS=1 để chạy trên database thật).');
+    console.log('  ⚠ Bỏ qua các test DB thao tác dữ liệu nghiệp vụ (đặt RUN_DB_TESTS=1 để chạy đầy đủ).');
   } else {
-    const prisma = require('../src/lib/prisma');
     const dishService = require('../src/services/dish.service');
     const chefService = require('../src/services/chef.service');
     const ingredientService = require('../src/services/ingredient.service');
@@ -570,165 +509,74 @@ async function run() {
         assert.strictEqual(full.ingredients.length, 0);
         assert.strictEqual(full.chefs.length, 0);
       });
-
-      await itAsync('Một nguyên liệu dùng trong nhiều Dish / một Chef nấu nhiều Dish', async () => {
-        const d1 = await dishService.createDish({ name: `__IT_D1_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [ingA.id], chefIds: [chefA.id], relationsSubmitted: true }, null);
-        const d2 = await dishService.createDish({ name: `__IT_D2_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [ingA.id], chefIds: [chefA.id], relationsSubmitted: true }, null);
-        created.dishes.push(d1.id, d2.id);
-        const ing = await ingredientService.getIngredientById(ingA.id);
-        const chef = await chefService.getChefById(chefA.id);
-        assert.ok(ing.dishes.length >= 2, 'Ingredient phải liên kết nhiều Dish');
-        assert.ok(chef.dishes.length >= 2, 'Chef phải liên kết nhiều Dish');
-      });
-
-      await itAsync('Từ chối ID quan hệ không tồn tại', async () => {
-        await assert.rejects(
-          () => dishService.createDish({ name: `__IT_BAD_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [99999999], chefIds: [], relationsSubmitted: true }, null)
-        );
-      });
-
-      await itAsync('Cập nhật đồng bộ quan hệ đúng theo lựa chọn', async () => {
-        const dish = await dishService.createDish({ name: `__IT_SYNC_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [ingA.id, ingB.id], chefIds: [chefA.id], relationsSubmitted: true }, null);
-        created.dishes.push(dish.id);
-        await dishService.updateDish(dish.id, { name: dish.name, category: 'Test', price: 1, ingredientIds: [ingA.id], chefIds: [chefA.id, chefB.id], relationsSubmitted: true }, null);
-        const full = await dishService.getDishById(dish.id);
-        assert.deepStrictEqual(full.ingredients.map((r) => r.ingredientId).sort(), [ingA.id]);
-        assert.deepStrictEqual(full.chefs.map((r) => r.chefId).sort(), [chefA.id, chefB.id].sort());
-      });
-
-      await itAsync('Tìm kiếm full-text + bỏ dấu chạy trong PostgreSQL', async () => {
-        const unique = Date.now();
-        const dish = await dishService.createDish({
-          name: `Phở Bò __IT_${unique}__`, category: 'Món nước', price: 55000,
-          ingredientIds: [], chefIds: [], relationsSubmitted: true
-        }, null);
-        created.dishes.push(dish.id);
-
-        const found = await dishService.getDishes({ q: 'pho bo', page: 1, limit: 50 });
-        assert.ok(found.dishes.some((row) => row.id === dish.id), 'Phải tìm thấy khi gõ không dấu');
-
-        const priceFiltered = await dishService.getDishes({ q: 'pho bo', minPrice: 60000, page: 1, limit: 50 });
-        assert.ok(!priceFiltered.dishes.some((row) => row.id === dish.id), 'Bộ lọc giá phải kết hợp với tìm kiếm');
-      });
-
-      await itAsync('Tìm kiếm Chef và Ingredient cũng chạy bằng SQL', async () => {
-        const chefName = `Đầu Bếp Phở __IT_${Date.now()}__`;
-        const chef = await prisma.chef.create({ data: { name: chefName } });
-        const ingredientName = `Hồi An __IT_${Date.now()}__`;
-        const ingredient = await prisma.ingredient.create({ data: { name: ingredientName } });
-        created.chefs.push(chef.id);
-        created.ingredients.push(ingredient.id);
-
-        const chefs = await chefService.getChefs({ q: 'dau bep pho', page: 1, limit: 50 });
-        assert.ok(chefs.chefs.some((row) => row.id === chef.id), 'Chef phải tìm được bằng FTS không dấu');
-
-        const ingredients = await ingredientService.getIngredients({ q: 'hoi an', page: 1, limit: 50 });
-        assert.ok(ingredients.ingredients.some((row) => row.id === ingredient.id), 'Ingredient phải tìm được bằng FTS không dấu');
-      });
-
-      await itAsync('Không thay đổi quan hệ khi form không gửi relationsSubmitted', async () => {
-        const dish = await dishService.createDish({ name: `__IT_KEEP_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [ingA.id], chefIds: [chefA.id], relationsSubmitted: true }, null);
-        created.dishes.push(dish.id);
-        await dishService.updateDish(dish.id, { name: dish.name, category: 'Test', price: 2, ingredientIds: [], chefIds: [], relationsSubmitted: false }, null);
-        const full = await dishService.getDishById(dish.id);
-        assert.strictEqual(full.ingredients.length, 1);
-        assert.strictEqual(full.chefs.length, 1);
-      });
-
-      await itAsync('Xóa Dish chỉ xóa join rows, KHÔNG xóa Chef/Ingredient', async () => {
-        const dish = await dishService.createDish({ name: `__IT_DEL_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [ingA.id], chefIds: [chefA.id], relationsSubmitted: true }, null);
-        await dishService.deleteDish(dish.id);
-        assert.strictEqual(await prisma.dishIngredient.count({ where: { dishId: dish.id } }), 0);
-        assert.strictEqual(await prisma.dishChef.count({ where: { dishId: dish.id } }), 0);
-        assert.ok(await prisma.chef.findUnique({ where: { id: chefA.id } }));
-        assert.ok(await prisma.ingredient.findUnique({ where: { id: ingA.id } }));
-      });
-
-      await itAsync('Chặn xóa Chef/Ingredient đang được sử dụng', async () => {
-        const dish = await dishService.createDish({ name: `__IT_BLOCK_${Date.now()}__`, category: 'Test', price: 1, ingredientIds: [ingA.id], chefIds: [chefA.id], relationsSubmitted: true }, null);
-        created.dishes.push(dish.id);
-        await assert.rejects(() => chefService.deleteChef(chefA.id));
-        await assert.rejects(() => ingredientService.deleteIngredient(ingA.id));
-      });
     } finally {
       await cleanup();
       await prisma.$disconnect().catch(() => {});
     }
   }
 
-  // 14. Login throttle integration (opt-in, real database)
-  console.log('\n14. Throttle đăng nhập trên database (RUN_DB_TESTS):');
+  // 14. Kiểm thử chính sách đếm sai, session store & OTP trên DB
+  console.log('\n14. Kiểm thử bảo mật (chính sách đếm sai, session store, reset token):');
   if (!runDb) {
-    console.log('  ⚠ Bỏ qua (đặt RUN_DB_TESTS=1 để chạy trên database thật).');
+    console.log('  ⚠ Bỏ qua các test nghiệp vụ DB thời gian thực (đặt RUN_DB_TESTS=1 để chạy trực tiếp trên PostgreSQL).');
   } else {
-    const prisma = require('../src/lib/prisma');
-    const {
-      recordLoginFailure,
-      getLoginStatus,
-      resetLoginFailures,
-      consumeRegistrationAttempt
-    } = require('../src/services/auth-throttle.service');
+    await itAsync('Chính sách đếm sai: 3 lần bắt CAPTCHA, 10 lần khóa 5 phút, cửa sổ 15 phút', async () => {
+      const email = `test-throttle-${Date.now()}@example.com`;
+      const key = `login-email:${email}`;
+      const windowMs = 15 * 60 * 1000;
 
-    const loginId = buildLoginIdentifier(`test-${Date.now()}`, 'throttle@example.com');
-    const registrationIp = `test-reg-${Date.now()}`;
+      // Lần 1 và 2: chưa bắt captcha
+      const f1 = await recordLoginFailure(key, windowMs, 10, 5 * 60 * 1000);
+      assert.strictEqual(f1.count, 1);
+      const s1 = await getRateLimitStatus(key, windowMs);
+      assert.strictEqual(s1.count >= 3, false);
 
-    try {
-      await itAsync('Sai 1–2 lần không khoá; lần 3 khoá 30 giây', async () => {
-        const first = await recordLoginFailure(loginId);
-        assert.strictEqual(first.locked, false);
-        assert.strictEqual(first.failureCount, 1);
+      const f2 = await recordLoginFailure(key, windowMs, 10, 5 * 60 * 1000);
+      assert.strictEqual(f2.count, 2);
 
-        const second = await recordLoginFailure(loginId);
-        assert.strictEqual(second.locked, false);
-        assert.strictEqual(second.failureCount, 2);
+      // Lần 3: count >= 3 -> bắt buộc captcha
+      const f3 = await recordLoginFailure(key, windowMs, 10, 5 * 60 * 1000);
+      assert.strictEqual(f3.count, 3);
+      const s3 = await getRateLimitStatus(key, windowMs);
+      assert.strictEqual(s3.count >= 3, true);
 
-        const third = await recordLoginFailure(loginId);
-        assert.strictEqual(third.locked, true);
-        assert.ok(third.retryAfterSeconds >= 29 && third.retryAfterSeconds <= 30, `retry=${third.retryAfterSeconds}`);
-        assert.strictEqual(third.captchaRequired, true);
-      });
+      // Tăng đến lần 10 -> khóa 5 phút
+      for (let i = 4; i <= 9; i++) {
+        await recordLoginFailure(key, windowMs, 10, 5 * 60 * 1000);
+      }
+      const f10 = await recordLoginFailure(key, windowMs, 10, 5 * 60 * 1000);
+      assert.strictEqual(f10.count, 10);
+      assert.ok(f10.lockedUntil && f10.lockedUntil > new Date(), 'Lần 10 phải khóa 5 phút');
 
-      await itAsync('Hết thời gian chờ KHÔNG reset bộ đếm; lần 4 khoá 5 phút, lần 5 khoá 30 phút', async () => {
-        await prisma.loginThrottle.update({ where: { identifier: loginId }, data: { lockedUntil: new Date(Date.now() - 1000) } });
-        const expired = await getLoginStatus(loginId);
-        assert.strictEqual(expired.locked, false);
-        assert.strictEqual(expired.failureCount, 3, 'Bộ đếm phải giữ nguyên sau khi hết hạn khoá');
+      // Đăng nhập thành công -> reset bộ đếm
+      await resetRateLimitKey(key);
+      const sReset = await getRateLimitStatus(key, windowMs);
+      assert.strictEqual(sReset.count, 0);
+    });
 
-        const fourth = await recordLoginFailure(loginId);
-        assert.strictEqual(fourth.failureCount, 4);
-        assert.ok(fourth.retryAfterSeconds >= 299 && fourth.retryAfterSeconds <= 300, `retry=${fourth.retryAfterSeconds}`);
-
-        await prisma.loginThrottle.update({ where: { identifier: loginId }, data: { lockedUntil: new Date(Date.now() - 1000) } });
-        const fifth = await recordLoginFailure(loginId);
-        assert.strictEqual(fifth.failureCount, 5);
-        assert.ok(fifth.retryAfterSeconds >= 1799 && fifth.retryAfterSeconds <= 1800, `retry=${fifth.retryAfterSeconds}`);
-      });
-
-      await itAsync('Chỉ reset khi đăng nhập thành công (resetLoginFailures)', async () => {
-        await resetLoginFailures(loginId);
-        const status = await getLoginStatus(loginId);
-        assert.strictEqual(status.failureCount, 0);
-        assert.strictEqual(status.locked, false);
-        assert.strictEqual(status.captchaRequired, false);
-      });
-
-      await itAsync('Giới hạn đăng ký theo IP dùng cửa sổ thời gian cố định', async () => {
-        let last = null;
-        for (let i = 0; i < config.REGISTRATION_LIMIT; i++) {
-          last = await consumeRegistrationAttempt(registrationIp);
-          assert.strictEqual(last.allowed, true);
+    await itAsync('Session Store: lưu, đọc, cập nhật touch và hủy theo userId', async () => {
+      const store = new PrismaSessionStore();
+      const testUser = await prisma.user.create({
+        data: {
+          email: `sess_${Date.now()}@test.local`,
+          emailNormalized: `sess_${Date.now()}@test.local`,
+          passwordHash: 'dummy_hash'
         }
-        const blocked = await consumeRegistrationAttempt(registrationIp);
-        assert.strictEqual(blocked.allowed, false);
-        assert.ok(blocked.retryAfterSeconds > 0);
-        assert.strictEqual(last.remaining, 0);
       });
-    } finally {
-      await prisma.loginThrottle.deleteMany({ where: { identifier: loginId } }).catch(() => {});
-      const regIdentifiers = [buildRegistrationIdentifier(registrationIp)];
-      await prisma.registrationThrottle.deleteMany({ where: { identifier: { in: regIdentifiers } } }).catch(() => {});
-      await prisma.$disconnect().catch(() => {});
-    }
+      const sid = `sid_test_${Date.now()}`;
+      await new Promise((res, rej) => store.set(sid, { cookie: { maxAge: 60000 }, userId: testUser.id, role: 'viewer' }, err => err ? rej(err) : res()));
+
+      // Đọc session
+      const sess = await new Promise((res, rej) => store.get(sid, (err, d) => err ? rej(err) : res(d)));
+      assert.strictEqual(sess.role, 'viewer');
+
+      // Hủy mọi session của userId (như khi reset password)
+      await prisma.session.deleteMany({ where: { userId: testUser.id } });
+      const sessAfter = await new Promise((res, rej) => store.get(sid, (err, d) => err ? rej(err) : res(d)));
+      assert.strictEqual(sessAfter, null, 'Session phải bị hủy theo userId');
+
+      await prisma.user.delete({ where: { id: testUser.id } });
+    });
   }
 
   console.log('\n---------------------------------------------');

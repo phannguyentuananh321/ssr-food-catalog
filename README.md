@@ -19,8 +19,8 @@ Giao diện theo ngôn ngữ **Warm Cream — Modern Food Editorial**: thanh l�
 | ORM | **Prisma** | 6.x | Truy vấn & quản lý schema, migration |
 | Database | **PostgreSQL (Supabase)** | — | Lưu toàn bộ dữ liệu nghiệp vụ (Dish, Chef, Ingredient, quan hệ) |
 | File storage | **Supabase Storage** | — | Lưu file ảnh món ăn / đầu bếp / nguyên liệu |
-| Xác thực | **Supabase Auth** (`@supabase/ssr`) | 2.x / 0.12.x | Đăng ký, đăng nhập, xác minh email, reset mật khẩu, session cookie |
-| CAPTCHA | **Cloudflare Turnstile** | — | Chống bot ở đăng ký và sau 3 lần đăng nhập sai |
+| Xác thực | **Tự triển khai** (`express-session`, `argon2`, `nodemailer`) | — | Session + Cookie `sid` (Prisma Store), Argon2id, OTP 6 số, Password Reset, SMTP email |
+| CAPTCHA | **Google reCAPTCHA v2** | — | Chống bot ở đăng ký và bắt buộc sau 3 lần đăng nhập sai |
 | Xác thực dữ liệu | **Zod** | 3.x | Validate input form phía server |
 | Upload file | **Multer** (`memoryStorage`) | 1.x | Nhận ảnh upload, chỉ JPEG/PNG/WEBP, tối đa 5MB |
 | CSS / UI | **Tailwind CSS + DaisyUI** | 4.x / 5.x | Utility CSS + component library |
@@ -596,51 +596,54 @@ Kiểm chứng nhanh (an toàn, dùng ID không tồn tại):
 
 ---
 
-## 9. Xác Thực & Phân Quyền (Supabase Auth)
+## 9. Xác Thực & Phân Quyền (Tự Triển Khai)
 
 ### 9.1 Phạm vi bảo vệ
 
-- Toàn bộ site yêu cầu đăng nhập, **trừ** `/auth/*` và file tĩnh (`/css`, `/js`, `/images`).
-- API công khai (`/api/*`) trả `401 JSON` khi chưa đăng nhập; trang HTML redirect `303` tới `/auth/login?next=...`.
-- Toàn bộ `/admin/*` và `/admin/api/*` yêu cầu **Admin**; user thường nhận `403` (JSON hoặc trang `errors/403`).
+- Không cần đăng nhập: `/login`, `/register`, `/activate`, `/activate/resend`, `/forgot`, `/reset` và file tĩnh (`/css`, `/js`, `/images`).
+- Mọi route khác (toàn bộ cụm CRUD `/dishes`, `/chefs`, `/ingredients`, `/bookmarks` và `/admin/*`) chỉ yêu cầu đăng nhập, **KHÔNG** chặn theo role.
+- API công khai (`/api/*`) trả `401 JSON` khi chưa đăng nhập; trang HTML redirect `303` tới `/login?next=...` (có kiểm tra open redirect an toàn).
 
-### 9.2 Session & token
+### 9.2 Session, Cookie & CSRF Protection
 
-- `@supabase/ssr` tạo Supabase client theo từng request, đọc/ghi session bằng **cookie HttpOnly** (`SameSite=Lax`, `Secure` khi production). Không có session table hay session trong RAM.
-- Mỗi request, middleware `attachAuth` gọi `supabase.auth.getUser()` để **xác minh Access Token với Supabase**; user/email lấy từ kết quả này, không tin dữ liệu client gửi.
-- SDK tự refresh token; không lưu token vào URL, localStorage hay log.
+- `express-session` kết hợp với custom Prisma Store lưu tại bảng `Session` trong PostgreSQL.
+- Cookie tên `sid`: `httpOnly: true`, `sameSite: 'lax'`, `secure` khi production (trust proxy 1 hop), `path: '/'`, `rolling: true`, `resave: false`. Thời hạn 24 giờ cho phiên đăng nhập, phiên ẩn danh 30 phút. Định kỳ dọn session hết hạn mỗi 10 phút.
+- Đăng nhập thành công gọi `req.session.regenerate()` để cấp `sid` mới chống session fixation.
+- Middleware `attachUser` nạp `User` từ DB theo `session.userId`, chỉ chấp nhận status `active`, ngược lại hủy session.
+- CSRF Protection: Token ngẫu nhiên lưu trong session (đổi khi login), kiểm tra với mọi request thay đổi trạng thái (`POST`, `PATCH`, `DELETE`). Token được đọc từ body hoặc query `?_csrf=` để các form multipart upload ảnh vẫn xác thực hợp lệ. Mọi form POST (logout, form xóa `_method`, form tạo/sửa) đều có token `_csrf`.
 
-### 9.3 Đăng ký
+### 9.3 Đăng ký & Kích hoạt tài khoản
 
-- Email + mật khẩu; username **duy nhất ở database** qua `UserProfile.usernameLower` (unique index), kiểm tra cả trước và khi insert (bắt `P2002`).
-- Supabase Auth là nơi duy nhất hash/salt/kiểm tra mật khẩu. Ứng dụng **không** lưu mật khẩu hay bảng hash riêng.
-- Bắt buộc xác minh email (OTP hoặc link `token_hash` qua `/auth/callback`).
-- CAPTCHA Turnstile bắt buộc ở đăng ký; giới hạn tần suất theo IP (`REGISTRATION_LIMIT` / `REGISTRATION_WINDOW_MINUTES`).
+1. Rate limit `register-ip:<ip>` 5 lần / 60 phút (vượt thì trả `429`).
+2. Xác minh Google reCAPTCHA v2 phía server (fail closed).
+3. Validate dữ liệu bằng Zod: email chuẩn hóa (trim + lowercase), password 10–64 ký tự, khác email và không nằm trong ~50 mật khẩu thông dụng, displayName tối đa 50 ký tự.
+4. Mật khẩu được băm bằng **Argon2id** (OWASP recommendation). Nếu email đã tồn tại, hệ thống thực hiện verify với dummy hash để cân bằng thời gian (chống timing attack), không tạo bản ghi trùng và trả cùng một thông báo chung.
+5. Tài khoản mới tạo ở trạng thái `status: 'pending'`, `role: 'viewer'`. Sinh mã OTP 6 chữ số ngẫu nhiên (`crypto.randomInt`), lưu hash HMAC-SHA256 (`OTP_PEPPER`) trong `ActivationChallenge` (hạn 10 phút, attempts 0, sendCount 1) và gửi qua SMTP Nodemailer.
+6. Kích hoạt tài khoản (`POST /activate`): Trong một transaction, cập nhật có điều kiện (`usedAt: null`), kiểm tra attempts < 5, chưa hết hạn, hash khớp. Thành công chuyển `status: 'active'`, `303` sang `/login` (không tự đăng nhập). Sai tăng attempts, nhập sai 5 lần thì khóa 15 phút (`status 429`).
+7. Gửi lại mã kích hoạt (`POST /activate/resend`): Cách lần gửi trước tối thiểu 60 giây, tối đa 5 lần/giờ. Sinh OTP mới, attempts giữ nguyên, đang khóa thì trả `429`.
 
-### 9.4 Đăng nhập & chống brute force
+### 9.4 Đăng nhập & Chống dò mật khẩu (Brute Force)
 
-| Số lần sai liên tiếp | Thời gian chờ |
-| :--- | :--- |
-| 1–2 | Không chờ |
-| 3 | 30 giây |
-| 4 | 5 phút |
-| ≥ 5 | 30 phút (tối đa) |
+- Bộ đếm lưu trong bảng `RateLimit`: `login-email:<emailNormalized>` và `login-ip:<ip>`, cửa sổ cố định 15 phút tính từ lần sai đầu.
+- Thứ tự xử lý:
+  1. Nếu IP hoặc Email đang `lockedUntil` thì trả `429`, kể cả CAPTCHA đúng, không kiểm tra password.
+  2. Nếu số lần sai của email từ 3 trở lên thì bắt buộc giải reCAPTCHA hợp lệ. Thiếu hoặc sai thì render lại form kèm widget reCAPTCHA, không kiểm tra password.
+  3. Tra user theo email chuẩn hóa, verify Argon2id (user không tồn tại thì verify với hash giả).
+  4. Sai: tăng bộ đếm email và IP, trả thông báo lỗi chung duy nhất. Email sai 10 lần thì khóa 5 phút; IP sai 30 lần trong 15 phút thì khóa 5 phút.
+  5. Password đúng nhưng tài khoản `pending`: không tạo session, không tính là một lần sai, báo cần kích hoạt kèm link tới `/activate`.
+  6. Thành công: `req.session.regenerate()` (sid mới), gán `userId`, xóa bộ đếm `login-email` (không xóa `login-ip`), `303` tới `next` an toàn hoặc `/dishes`.
 
-- Trạng thái lưu ở bảng `LoginThrottle`, khoá theo `sha256(IP + email chuẩn hoá)`; **backend** kiểm tra trước khi gọi Supabase nên không thể bỏ qua bằng request trực tiếp.
-- Hết thời gian chờ **không reset** bộ đếm; chỉ đăng nhập thành công mới xoá bộ đếm.
-- CAPTCHA chỉ xuất hiện từ lần sai thứ 3. Lỗi đăng nhập luôn trả thông báo chung, không tiết lộ email có tồn tại hay không.
-- Email chưa xác minh bị từ chối (`403`) và **không** bị tính là một lần sai mật khẩu.
+### 9.5 Đăng xuất
 
-### 9.5 Quên mật khẩu & đăng xuất
+- `POST /logout` (có kiểm tra CSRF token, không có route `GET /logout`): hủy bản ghi session ở DB store trước, xóa cookie `sid` và `303` về `/login`. Dùng lại `sid` cũ sau khi đăng xuất bị từ chối truy cập.
 
-- Quên mật khẩu dùng `resetPasswordForEmail`; link recovery mở `/auth/callback` → thiết lập session → `/auth/reset-password` → `updateUser({ password })`.
-- Đăng xuất bằng `POST /auth/logout` gọi `supabase.auth.signOut()`; **không có** route GET đăng xuất.
+### 9.6 Quên mật khẩu & Đặt lại mật khẩu
 
-### 9.6 Admin
-
-- Chỉ email trong `ADMIN_EMAIL` (server env) **và đã xác minh** mới là Admin. Kiểm tra ở `requireAdmin` cho mọi route/API quản trị; UI chỉ ẩn/hiện link, không phải lớp bảo vệ.
-- Không có role tự chọn khi đăng ký, không có API tự nâng quyền, không hỗ trợ nhiều Admin.
-- `SUPABASE_SERVICE_ROLE_KEY` chỉ dùng ở server (Storage/Auth admin); không đưa vào view, JS hay Git.
+- `POST /forgot`: Rate limit `forgot-email` 3 lần/giờ và `forgot-ip` 10 lần/giờ (vượt trả `429`). Luôn trả cùng thông báo chung («Nếu email đã đăng ký, hướng dẫn đã được gửi.»).
+- Với tài khoản `active`: Vô hiệu token cũ, sinh token ngẫu nhiên 32 bytes (`base64url`), lưu SHA-256 `tokenHash` trong bảng `PasswordReset` (hạn 15 phút). Gửi link `APP_BASE_URL/reset?token=...` qua SMTP không đồng bộ (không làm lộ thời gian). Tài khoản `pending`: không gửi gì.
+- Trang `/forgot` luôn hiển thị dòng chữ cố định «Chưa nhận được mã kích hoạt? Gửi lại mã» trỏ tới `/activate`.
+- `GET /reset?token=`: Chỉ hiện form nếu token hợp lệ (chưa dùng, chưa hết hạn). GET **không bao giờ** thay đổi dữ liệu hay đặt `usedAt`. Header `Referrer-Policy: no-referrer`.
+- `POST /reset`: Validate mật khẩu mới; trong một transaction kiểm tra token hợp lệ, cập nhật `passwordHash`, đặt `usedAt = now`, vô hiệu mọi token chưa dùng của user, **XÓA mọi Session** có `userId` đó; gửi email thông báo đã đổi mật khẩu (không chứa password); `303` tới `/login`; không tự đăng nhập. Header `Referrer-Policy: no-referrer`.
 
 ---
 
