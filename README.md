@@ -264,34 +264,69 @@ Ràng buộc: `UNIQUE(dishId, ingredientId)` — một món không thể gắn t
 
 Ràng buộc: `UNIQUE(dishId, chefId)`.
 
-**UserProfile — hồ sơ công khai gắn 1-1 với Supabase Auth user**
+**User — tài khoản người dùng**
 
 | Cột | Kiểu | Ghi chú |
 | :--- | :--- | :--- |
-| `id` | Text, PK | Trùng `auth.users.id` của Supabase |
-| `email` | Text, UNIQUE | Email đã đăng ký |
-| `username` | Text | Tên hiển thị |
-| `usernameLower` | Text, UNIQUE | Chuẩn hoá để kiểm tra trùng không phân biệt hoa/thường |
+| `id` | String, PK | Mã định danh duy nhất (cuid) |
+| `email` | String | Email người dùng nhập vào |
+| `emailNormalized` | String, UNIQUE | Email đã chuẩn hoá (trim + lowercase) |
+| `displayName` | String, null | Tên hiển thị (tối đa 50 ký tự) |
+| `passwordHash` | String | Mật khẩu băm bằng Argon2id (OWASP recommendation) |
+| `role` | String | Mặc định `'viewer'` |
+| `status` | String | `'pending'` (chờ kích hoạt OTP) hoặc `'active'` (đã kích hoạt) |
+| `emailVerifiedAt` | Timestamp, null | Thời điểm xác minh email thành công |
 | `createdAt` / `updatedAt` | Timestamp | |
 
-Không lưu mật khẩu/hash — Supabase Auth sở hữu hoàn toàn thông tin xác thực.
+Không ghi password, passwordHash hay mã OTP vào log/response.
 
-**LoginThrottle — chống brute force**
-
-| Cột | Kiểu | Ghi chú |
-| :--- | :--- | :--- |
-| `identifier` | Text, PK | `sha256(IP + email chuẩn hoá)`, không lưu email thô |
-| `failureCount` | Int | Số lần sai liên tiếp (không reset khi hết hạn khoá) |
-| `lockedUntil` | Timestamp, null | Thời điểm mở khoá (index) |
-| `lastFailureAt` | Timestamp | |
-
-**RegistrationThrottle — giới hạn đăng ký theo IP**
+**ActivationChallenge — thử thách kích hoạt tài khoản qua OTP**
 
 | Cột | Kiểu | Ghi chú |
 | :--- | :--- | :--- |
-| `identifier` | Text, PK | `sha256(IP)` |
-| `count` | Int | Số lần trong cửa sổ |
+| `id` | String, PK | cuid |
+| `userId` | String, UNIQUE, FK → `User.id` | Quan hệ 1-1, `ON DELETE CASCADE` |
+| `purpose` | String | Mặc định `'activation'` |
+| `otpHash` | String | HMAC-SHA256(`OTP_PEPPER`, `userId:purpose:otp`) |
+| `expiresAt` | Timestamp | Hạn sử dụng mã OTP (10 phút) |
+| `usedAt` | Timestamp, null | Thời điểm đã kích hoạt |
+| `attempts` | Int | Số lần nhập sai (tối đa 5 lần) |
+| `lockedUntil` | Timestamp, null | Thời điểm mở khoá nếu nhập sai 5 lần (khoá 15 phút) |
+| `lastSentAt` | Timestamp | Thời điểm gửi OTP gần nhất (chống spam 60s) |
+| `sendCount` | Int | Số lần đã gửi trong cửa sổ (tối đa 5 lần / giờ) |
+| `sendWindowStart` | Timestamp | Thời điểm bắt đầu cửa sổ gửi mã |
+
+**PasswordReset — token đặt lại mật khẩu**
+
+| Cột | Kiểu | Ghi chú |
+| :--- | :--- | :--- |
+| `id` | String, PK | cuid |
+| `userId` | String, FK → `User.id` | `ON DELETE CASCADE` (index: `userId`) |
+| `tokenHash` | String, UNIQUE | SHA-256 của token ngẫu nhiên 32 bytes (`base64url`) |
+| `expiresAt` | Timestamp | Hạn sử dụng token (15 phút) |
+| `usedAt` | Timestamp, null | Thời điểm token được sử dụng |
+| `createdAt` | Timestamp | |
+
+**Session — lưu trữ phiên làm việc phía server (Prisma Session Store)**
+
+| Cột | Kiểu | Ghi chú |
+| :--- | :--- | :--- |
+| `sid` | String, PK | Session ID tương ứng với cookie `sid` |
+| `userId` | String, null, FK → `User.id` | `ON DELETE CASCADE` (null đối với khách ẩn danh) |
+| `data` | Text | Dữ liệu session tuần tự hóa JSON (lưu token CSRF, flash, ...) |
+| `expiresAt` | Timestamp | Hạn hết hạn session (index: `expiresAt`, `userId`) |
+| `createdAt` | Timestamp | |
+
+Tự động quét dọn các session hết hạn định kỳ mỗi 10 phút.
+
+**RateLimit — bộ đếm giới hạn tốc độ và chống brute force**
+
+| Cột | Kiểu | Ghi chú |
+| :--- | :--- | :--- |
+| `key` | String, PK | Khóa định danh (ví dụ `login-ip:<ip>`, `login-email:<email>`, `register-ip:<ip>`) |
+| `count` | Int | Số lần vi phạm/yêu cầu trong cửa sổ |
 | `windowStart` | Timestamp | Bắt đầu cửa sổ cố định |
+| `lockedUntil` | Timestamp, null | Thời điểm mở khóa nếu bị tạm khóa do vi phạm |
 
 ### 3.3 Quy tắc thiết kế quan trọng
 
@@ -317,7 +352,7 @@ Database được quản lý bằng **Prisma Migrate**:
 | `20260101000000_init` | Baseline: bảng `Dish`, `Chef`, `Ingredient` + index |
 | `20261017000000_add_dish_chef_ingredient_relations` | Thêm bảng nối `DishIngredient`, `DishChef` + index + khóa ngoại |
 | `20261106000000_add_search_extensions` | Bật `pg_trgm` + `unaccent`, tạo hàm `public.immutable_unaccent(text)` và GIN index FTS/trigram cho `Dish`, `Chef`, `Ingredient` |
-| `20261106010000_add_auth_profiles_throttles` | Bảng `UserProfile` (username duy nhất, liên kết 1-1 với Supabase Auth user), `LoginThrottle` (đếm lần sai + thời điểm mở khoá), `RegistrationThrottle` (giới hạn đăng ký theo IP) |
+| `20261106020000_custom_auth` | Xóa `UserProfile`, `LoginThrottle`, `RegistrationThrottle`; Tạo các bảng cho hệ thống xác thực tự quản: `User` (lưu Argon2id hash), `ActivationChallenge` (HMAC OTP 6 số), `PasswordReset` (token SHA-256), `Session` (DB session store), `RateLimit` (chống brute force) |
 
 - Áp dụng an toàn (không xóa dữ liệu): `npm run prisma:migrate:deploy`
 - Kiểm tra trạng thái: `npm run prisma:migrate:status`
@@ -340,16 +375,21 @@ Sao chép `.env.example` thành `.env` ở thư mục gốc (**không commit `.e
 | `NODE_ENV` | Tùy chọn | `development` (mặc định) hoặc `production` |
 | `PORT` | Tùy chọn | Cổng HTTP server (mặc định `3000`) |
 | `APP_BASE_URL` | Tùy chọn | URL gốc (mặc định `http://localhost:3000`) |
-| `DATABASE_URL` | **Bắt buộc** | Chuỗi kết nối PostgreSQL. Supabase Dashboard → Project Settings → Database → Connection String (Pooler) |
-| `DIRECT_URL` | Khuyến nghị | Kết nối trực tiếp cho Prisma CLI/migrate (khi runtime dùng transaction pooler) |
-| `SUPABASE_URL` | Bắt buộc cho upload ảnh & Auth | Project URL. Supabase → Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | Bắt buộc cho upload ảnh | `service_role` key (secret, **chỉ ở server**, không bao giờ gửi ra client) |
-| `SUPABASE_ANON_KEY` | **Bắt buộc cho Auth** | Publishable/anon key. Supabase → Settings → API |
+| `DATABASE_URL` | **Bắt buộc** | Chuỗi kết nối PostgreSQL. Supabase Dashboard → Project Settings → Database → Connection String |
+| `DIRECT_URL` | Khuyến nghị | Kết nối trực tiếp cho Prisma CLI/migrate (khi runtime dùng connection pooler) |
+| `SESSION_SECRET` | **Bắt buộc** | Chuỗi bí mật ký cookie session (tối thiểu 32 ký tự ngẫu nhiên) |
+| `OTP_PEPPER` | **Bắt buộc** | Khóa bí mật HMAC để băm mã OTP kích hoạt (tối thiểu 32 ký tự ngẫu nhiên) |
+| `RECAPTCHA_SITE_KEY` | Bắt buộc cho form | Google reCAPTCHA v2 (Checkbox "I'm not a robot") Site Key để hiển thị widget |
+| `RECAPTCHA_SECRET_KEY` | Bắt buộc server | Google reCAPTCHA v2 Secret Key dùng xác minh server qua Google siteverify |
+| `SMTP_HOST` | Bắt buộc gửi mail | Địa chỉ SMTP server (ví dụ `smtp.gmail.com` hoặc `localhost` khi dev) |
+| `SMTP_PORT` | Bắt buộc gửi mail | Cổng SMTP (`465` cho SSL/TLS hoặc `587` cho STARTTLS) |
+| `SMTP_USER` | Bắt buộc gửi mail | Tên người dùng / email SMTP (ví dụ tài khoản Gmail của bạn) |
+| `SMTP_PASS` | Bắt buộc gửi mail | Mật khẩu SMTP (nếu dùng Gmail, bắt buộc dùng **Mật khẩu ứng dụng / App Password**) |
+| `MAIL_FROM` | Tùy chọn | Địa chỉ hiển thị người gửi (mặc định `"Ấm Vị" <no-reply@amvi.local>`) |
+| `SUPABASE_URL` | Bắt buộc cho ảnh | Project URL Supabase dùng cho Storage (Settings → API) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Bắt buộc cho ảnh | `service_role` key (secret, **chỉ ở server**, dùng upload ảnh món/bếp) |
 | `SUPABASE_STORAGE_BUCKET` | Tùy chọn | Tên bucket (mặc định `dish-images`) |
-| `ADMIN_EMAIL` | **Bắt buộc cho khu quản trị** | Đúng **một** email admin. Phải là tài khoản Supabase Auth đã xác minh email. So khớp ở backend, không hardcode trong frontend |
-| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Production: bắt buộc | Cloudflare Turnstile. Site key hiển thị widget, secret chỉ dùng server. Để trống ở dev = bỏ qua CAPTCHA |
 | `REGISTRATION_LIMIT` / `REGISTRATION_WINDOW_MINUTES` | Tùy chọn | Giới hạn đăng ký theo IP (mặc định 5 lần / 60 phút) |
-| `SESSION_SECRET` | Tùy chọn | Chuỗi bí mật ≥ 32 ký tự |
 | `SEED_DEMO` | Tùy chọn | `true` để cho phép seed demo (chỉ dev/demo) |
 
 ---
@@ -358,7 +398,7 @@ Sao chép `.env.example` thành `.env` ở thư mục gốc (**không commit `.e
 
 ### Chuẩn bị (Prerequisites)
 - **Node.js 18+** và **npm** đã cài (`node -v`, `npm -v`).
-- Một project **Supabase** (miễn phí) đã tạo.
+- Một project **Supabase** (dùng PostgreSQL và Storage).
 - Trong Supabase Storage: tạo bucket tên **`dish-images`** và để chế độ **public** (hoặc đặt `SUPABASE_STORAGE_BUCKET` theo tên khác).
 
 ---
@@ -376,44 +416,43 @@ Copy-Item .env.example .env
 # macOS / Linux
 cp .env.example .env
 ```
-Mở `.env` và điền tối thiểu:
-- `DATABASE_URL` (và nên có `DIRECT_URL`)
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_STORAGE_BUCKET=dish-images`
-- `ADMIN_EMAIL` = Gmail quản trị thật (xem Bước 2b)
+Mở `.env` và điền:
+- `DATABASE_URL` (và `DIRECT_URL`)
+- `SESSION_SECRET` và `OTP_PEPPER` (chuỗi ngẫu nhiên dài ≥ 32 ký tự)
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET=dish-images`
+- Cấu hình SMTP gửi mail & Google reCAPTCHA v2 (xem Bước 2b)
 
-### Bước 2b — Cấu hình Supabase Auth, email và CAPTCHA (thủ công trên Dashboard)
+### Bước 2b — Cấu hình SMTP Email và Google reCAPTCHA v2
 
-**a) Bật Email provider** — Supabase Dashboard → **Authentication → Providers → Email**: bật *Enable Email provider*, bật *Confirm email* (tài khoản chưa xác minh không được đăng nhập).
+**a) Cấu hình SMTP gửi email (kích hoạt tài khoản OTP & quên mật khẩu)**
+- Ứng dụng gửi email trực tiếp qua SMTP bằng **Nodemailer**, hoàn toàn độc lập với dịch vụ email của Supabase.
+- **Dùng Gmail**:
+  1. Đăng nhập tài khoản Google → Quản lý Tài khoản Google → **Bảo mật**.
+  2. Bật **Xác minh 2 bước** (2-Step Verification).
+  3. Tìm kiếm **Mật khẩu ứng dụng** (App Passwords) → Tạo mật khẩu mới cho ứng dụng (ví dụ đặt tên `AmVi Web`).
+  4. Copy mật khẩu ứng dụng 16 ký tự vừa tạo vào `.env`:
+     ```env
+     SMTP_HOST=smtp.gmail.com
+     SMTP_PORT=465
+     SMTP_USER=email-cua-ban@gmail.com
+     SMTP_PASS=mat_khau_ung_dung_16_ky_tu
+     MAIL_FROM="Ấm Vị <email-cua-ban@gmail.com>"
+     ```
+- **Khi dev/test cục bộ chưa có SMTP**: Mailer service được thiết kế tự động bắt lỗi kết nối SMTP (`ECONNREFUSED`) và ghi log fallback an toàn mà không làm crash ứng dụng.
 
-**b) Redirect URLs** — Authentication → **URL Configuration**:
-- `Site URL`: `http://localhost:3000` (production: domain thật)
-- `Redirect URLs`: thêm `http://localhost:3000/auth/callback?next=/dishes` và `http://localhost:3000/auth/callback?next=/auth/reset-password`
-- Production: thêm các URL tương ứng với `APP_BASE_URL`.
-
-**c) Email templates** — Authentication → **Email Templates**:
-- *Confirm signup*: dùng link dạng `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email&next=/dishes` để xác minh được **trên thiết bị khác** (mở email ở máy khác vẫn đăng nhập được).
-- *Reset password*: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/auth/reset-password`.
-- OTP 6 số vẫn dùng được trên trang `/auth/verify` nếu template mặc định gửi mã.
-
-**d) SMTP (bắt buộc nếu muốn đăng ký thật)** — Authentication → **SMTP Settings**: cấu hình SMTP riêng (Resend/Gmail/Brevo/SendGrid...). Email mặc định của Supabase bị giới hạn rất thấp (vài email/giờ), nên sau vài lần đăng ký/thử nghiệm sẽ báo *“Hệ thống gửi email xác minh đang tạm đạt giới hạn”* (`over_email_send_rate_limit`).
-
-- **Gmail**: bật 2-Step Verification → tạo **App Password** → SMTP host `smtp.gmail.com`, port `465`, username là địa chỉ Gmail, password là App Password. Không dùng mật khẩu Gmail thường.
-- **Resend/Brevo**: tạo tài khoản, xác minh domain (hoặc dùng địa chỉ test), lấy SMTP credentials rồi dán vào Supabase.
-- Sau khi lưu SMTP, thử đăng ký lại; nếu vẫn còn quota cũ, chờ vài phút.
-- **Chỉ để demo nhanh**: Authentication → Providers → Email → tắt *Confirm email* (tài khoản đăng ký xong có session ngay). **Bật lại trước khi nộp/demo chính thức** vì yêu cầu bắt buộc xác minh email.
-- Nếu không cấu hình được SMTP, hãy dùng **Supabase Dashboard → Authentication → Users → Add user** với *Auto Confirm* để tạo tài khoản test.
-
-**e) Tạo tài khoản Admin** — đăng ký trên web bằng đúng `ADMIN_EMAIL`, xác minh email, rồi đảm bảo `ADMIN_EMAIL` trong `.env` trùng khớp (không phân biệt hoa/thường). Không có API công khai nào nâng quyền; mọi tài khoản khác mặc định là user.
-
-**f) Cloudflare Turnstile (bản chính thức)** — tạo widget tại **https://dash.cloudflare.com → Turnstile → Add widget**:
-1. Đặt tên widget (vd. `am-vi`), thêm domain `localhost` và domain production.
-2. Copy **Site Key** (bắt đầu bằng `0x...`) → `TURNSTILE_SITE_KEY`.
-3. Copy **Secret Key** (bắt đầu bằng `0x...`) → `TURNSTILE_SECRET_KEY` (chỉ lưu server).
-4. Khởi động lại app. Widget sẽ không còn nhãn **“Testing only”**.
-
-- **Test keys** (`1x000...`, `2x000...`, `3x000...`) chỉ dùng khi chưa có tài khoản Cloudflare: widget hiện nhãn *Testing only* và `siteverify` luôn pass/block theo loại key. App **từ chối khởi động ở production** nếu phát hiện test key (`validateEnv`), và `verifyTurnstile` cũng fail closed.
-- Supabase Dashboard → Authentication → **Attack Protection**: có thể bật CAPTCHA và dán Turnstile secret để Supabase cũng kiểm tra; ứng dụng **vẫn xác minh server-side** qua `siteverify`.
-- Để trống cả hai key khi dev = bỏ qua CAPTCHA (chỉ trong `NODE_ENV=development`); production thiếu key sẽ **fail closed** và không khởi động.
+**b) Cấu hình Google reCAPTCHA v2 ("I'm not a robot")**
+- Truy cập [Google reCAPTCHA Console](https://www.google.com/recaptcha/admin):
+  1. Chọn loại **reCAPTCHA v2** -> Huy hiệu hộp kiểm "Tôi không phải là người máy" (Checkbox).
+  2. Thêm tên miền: `localhost`, `127.0.0.1`, và tên miền production của bạn.
+  3. Lấy **Site Key** và **Secret Key** dán vào `.env`:
+     ```env
+     RECAPTCHA_SITE_KEY=your_recaptcha_site_key
+     RECAPTCHA_SECRET_KEY=your_recaptcha_secret_key
+     ```
+- **Khóa thử nghiệm (Test Keys) của Google** (mặc định đã điền sẵn trong `.env.example`):
+  - `RECAPTCHA_SITE_KEY=6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI`
+  - `RECAPTCHA_SECRET_KEY=6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe`
+  - Sử dụng test keys cho phép checkbox luôn hợp lệ khi kiểm thử cục bộ. Trên production, bắt buộc thay bằng cặp khóa thật để đảm bảo an toàn.
 
 ### Bước 3 — Sinh Prisma Client
 ```bash
@@ -499,13 +538,13 @@ Mỗi đối tượng có 5 trang (3 × 5 = 15):
 | **Ingredient** | `GET /ingredients` | `GET /ingredients/:id` | `GET /admin/ingredients` | `GET /admin/ingredients/new` | `GET /admin/ingredients/:id/edit` |
 
 Trang hỗ trợ:
-- `GET /` → redirect `303` sang `/dishes` (hoặc `/auth/login` nếu chưa đăng nhập).
+- `GET /` → redirect `303` sang `/dishes` (hoặc `/login` nếu chưa đăng nhập).
 - `GET /bookmarks` → trang “Danh Sách Đã Lưu” (dữ liệu thật tải từ PostgreSQL theo ID trong `localStorage`).
 - `GET /api/dishes|chefs|ingredients?page=N&...` → JSON `{ html, pagination }` cho chế độ Tải thêm / Cuộn vô hạn.
 - `GET /api/bookmarks?dishes=&chefs=&ingredients=` → HTML card + `validIds` để dọn ID đã bị xóa khỏi DB.
 - `GET /admin/api/chefs?q=` và `GET /admin/api/ingredients?q=` → tìm kiếm ILIKE phía server cho form món ăn.
-- Auth: `GET/POST /auth/login`, `GET/POST /auth/register`, `GET/POST /auth/verify`, `POST /auth/resend-verification`, `GET /auth/callback`, `GET/POST /auth/forgot-password`, `GET/POST /auth/reset-password`, `POST /auth/logout`.
-- `403 Forbidden` (không đủ quyền), `404 Not Found`, `500 Server Error` (không lộ stack trace).
+- Auth: `GET/POST /login`, `GET/POST /register`, `GET/POST /activate`, `POST /activate/resend`, `GET/POST /forgot`, `GET/POST /reset`, `POST /logout`.
+- `403 Forbidden` (CSRF token không hợp lệ), `404 Not Found`, `429 Too Many Requests` (vượt ngưỡng Rate limit / tạm khóa brute force), `500 Server Error` (lỗi hệ thống, không lộ stack trace).
 
 ---
 
@@ -649,16 +688,36 @@ Kiểm chứng nhanh (an toàn, dùng ID không tồn tại):
 
 ## 10. Kiểm Thử
 
-Bộ test gồm:
+Bộ test tự động (`npm test`) gồm:
 - Validator Zod (Dish/Chef/Ingredient/Auth) và chuẩn hoá danh sách ID quan hệ.
+- Quy chuẩn mật khẩu: 10–64 ký tự, khác email, cấm danh sách 50 mật khẩu phổ biến nhất.
 - Xử lý **quan hệ tùy chọn** (Dish không có Chef/Ingredient vẫn hợp lệ).
 - Helper phân trang (3 chế độ), bookmark ID parsing, cấu trúc SQL FTS/trigram.
-- Regression view: card có nút bookmark, form admin không render toàn bộ quan hệ, layout nạp đủ script.
-- Auth: chính sách khoá 30s/5ph/30ph, hash identifier, chặn open redirect, `requireAuth`/`requireAdmin`, không lưu/log mật khẩu, Turnstile server-side.
-- Tích hợp CRUD + quan hệ nhiều-nhiều + quy tắc xóa + FTS không dấu + **throttle đăng nhập thật trên PostgreSQL** (bật bằng `RUN_DB_TESTS=1`).
+- Regression view: card có nút bookmark, form admin tìm kiếm quan hệ không render toàn bộ dữ liệu, layout nạp đủ script.
+- Thư viện xác thực tự quản:
+  - Băm mật khẩu bằng Argon2id + dummy verify cân bằng thời gian khi user không tồn tại.
+  - OTP 6 số ngẫu nhiên băm bằng HMAC-SHA256 (`OTP_PEPPER`), so sánh bằng `timingSafeEqual`.
+  - Token đặt lại mật khẩu 32 bytes ngẫu nhiên (`base64url`), băm bằng SHA-256.
+  - Session store Prisma trên database: `get`, `set`, `destroy`, `touch`, dọn dẹp phiên hết hạn.
+  - CSRF protection: sinh token ngẫu nhiên lưu session, kiểm tra với mọi request POST/PATCH/DELETE.
+  - Rate limiting & chống dò mật khẩu: RateLimit helper, khóa 5 phút khi sai 10 lần, bắt reCAPTCHA khi sai từ 3 lần.
+  - Chặn open redirect an toàn khi chuyển hướng sau đăng nhập.
+  - Header `Referrer-Policy: no-referrer` bảo vệ trang đặt lại mật khẩu.
+  - Tuyệt đối không log thông tin nhạy cảm (password, hash, OTP, reset token, session ID).
+- Tích hợp cơ sở dữ liệu thật (bật bằng `RUN_DB_TESTS=1`):
+  - Kích hoạt OTP transaction với cập nhật có điều kiện (`usedAt: null`), chống race condition.
+  - Đặt lại mật khẩu thành công tự động hủy toàn bộ session của tài khoản đó trong database.
+  - Rate limiting ghi nhận và khóa trực tiếp trên bảng `RateLimit`.
 
 ```bash
+# Chạy 39 test đơn vị (không cần kết nối database)
 npm test
+
+# Chạy toàn bộ 43 test tích hợp (yêu cầu database PostgreSQL)
+# PowerShell:
+$env:RUN_DB_TESTS="1"; npm test
+# Bash:
+RUN_DB_TESTS=1 npm test
 ```
 
 ---
@@ -673,8 +732,11 @@ npm test
 | PostgreSQL Full-text + Fuzzy (pg_trgm/unaccent) | Hoàn thành |
 | Lọc/sắp xếp giá (chỉ Dishes) | Hoàn thành |
 | Tìm kiếm Chef/Ingredient phía server trong form admin | Hoàn thành |
-| Đăng ký/đăng nhập/xác minh email/quên mật khẩu/đăng xuất | Hoàn thành |
-| Chống brute force + CAPTCHA + rate limit đăng ký | Hoàn thành |
-| Admin theo `ADMIN_EMAIL`, chặn API quản trị ở backend | Hoàn thành |
+| Xác thực tự triển khai (Argon2id, OTP 6 số qua Nodemailer SMTP, Quên/Đặt lại mật khẩu) | Hoàn thành |
+| Quản lý phiên bằng Express Session + Cookie `sid` lưu trong bảng PostgreSQL Session | Hoàn thành |
+| Bảo vệ biểu mẫu toàn diện với mã chống giả mạo CSRF Token | Hoàn thành |
+| Chống brute force bằng RateLimit (cửa sổ 15p, sai 3 lần bắt reCAPTCHA, sai 10 lần khóa 5p) | Hoàn thành |
+| Xác minh người dùng bằng Google reCAPTCHA v2 phía server qua Google siteverify | Hoàn thành |
+| Phân quyền truy cập `requireAuth` cho toàn bộ khu vực quản trị và CRUD | Hoàn thành |
 
 ---
