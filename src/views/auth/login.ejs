@@ -5,7 +5,7 @@
         Ấ
       </div>
       <h1 class="font-serif text-3xl font-bold text-[#292820]">Đăng Nhập</h1>
-      <p class="text-sm text-[#7A7062] mt-2">Đăng nhập để xem thực đơn và bộ sưu tập đã lưu.</p>
+      <p class="text-sm text-[#7A7062] mt-2">Đăng nhập để xem thực đơn và quản lý các món ăn.</p>
     </div>
 
     <% if (typeof notice !== 'undefined' && notice) { %>
@@ -17,31 +17,31 @@
     <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
       <div class="alert alert-error text-sm rounded-xl mb-5" role="alert">
         <%= errorMessage %>
+        <% if (typeof isPendingUser !== 'undefined' && isPendingUser) { %>
+          <div class="mt-2">
+            <a href="/activate" class="btn btn-xs bg-[#FFFDF8] text-[#354B35] border-none font-bold">Kích Hoạt Ngay</a>
+          </div>
+        <% } %>
       </div>
     <% } %>
 
     <% if (typeof retryAfterSeconds !== 'undefined' && retryAfterSeconds > 0) { %>
       <div class="alert bg-[#FBEDE5] border border-[#E9C9B4] text-[#8A4A25] text-sm rounded-xl mb-5" role="status">
-        Thử lại sau <strong data-lock-countdown><%= retryAfterSeconds %></strong> giây.
+        Tài khoản hoặc IP tạm thời bị khóa. Thử lại sau <strong data-lock-countdown><%= retryAfterSeconds %></strong> giây.
       </div>
     <% } %>
 
-    <% if (!authConfigured) { %>
-      <div class="alert alert-warning text-sm rounded-xl mb-5">
-        Chưa cấu hình SUPABASE_URL / SUPABASE_ANON_KEY trong .env.
-      </div>
-    <% } %>
-
-    <form method="POST" action="/auth/login" class="space-y-4" data-auth-form data-lock-seconds="<%= retryAfterSeconds || 0 %>">
-      <input type="hidden" name="next" value="<%= next || '' %>">
+    <form method="POST" action="/login" class="space-y-4" data-auth-form data-lock-seconds="<%= (typeof retryAfterSeconds !== 'undefined') ? retryAfterSeconds : 0 %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="next" value="<%= (typeof next !== 'undefined' && next) ? next : '' %>">
 
       <div>
         <label for="email" class="block text-sm font-semibold text-[#354B35] mb-1.5">Email</label>
         <input id="email" name="email" type="email" required autocomplete="email"
-          value="<%= email || '' %>"
+          value="<%= (typeof email !== 'undefined' && email) ? email : '' %>"
           class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
           placeholder="ban@example.com">
-        <% if (errors && errors.email) { %><p class="text-xs text-error mt-1"><%= errors.email %></p><% } %>
+        <% if (typeof errors !== 'undefined' && errors && errors.email) { %><p class="text-xs text-error mt-1"><%= errors.email %></p><% } %>
       </div>
 
       <div>
@@ -49,17 +49,20 @@
         <input id="password" name="password" type="password" required autocomplete="current-password"
           class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-sm"
           placeholder="••••••••">
-        <% if (errors && errors.password) { %><p class="text-xs text-error mt-1"><%= errors.password %></p><% } %>
+        <% if (typeof errors !== 'undefined' && errors && errors.password) { %><p class="text-xs text-error mt-1"><%= errors.password %></p><% } %>
       </div>
 
-      <% if (captchaRequired) { %>
-        <div class="rounded-xl border border-[#E9E0D2] bg-[#FAF5EC] p-3">
-          <% if (turnstileConfigured) { %>
-            <p class="text-xs text-[#7A7062] mb-2">Vì có nhiều lần đăng nhập thất bại, vui lòng xác minh CAPTCHA.</p>
-            <div class="cf-turnstile" data-sitekey="<%= turnstileSiteKey %>" data-theme="light"></div>
-            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+      <% if (typeof captchaRequired !== 'undefined' && captchaRequired) { %>
+        <div class="rounded-xl border border-[#E9E0D2] bg-[#FAF5EC] p-3 flex flex-col items-center">
+          <p class="text-xs text-[#7A7062] mb-2 text-center">Do đã có từ 3 lần đăng nhập sai, vui lòng xác minh mã bên dưới:</p>
+          <% if (recaptchaSiteKey) { %>
+            <div class="g-recaptcha" data-sitekey="<%= recaptchaSiteKey %>"></div>
+            <script src="https://www.google.com/recaptcha/api.js" async defer></script>
           <% } else { %>
-            <p class="text-xs text-[#8A4A25]">CAPTCHA chưa được cấu hình (chế độ phát triển: tạm bỏ qua).</p>
+            <p class="text-xs text-[#8A4A25]">reCAPTCHA chưa được cấu hình.</p>
+          <% } %>
+          <% if (typeof errors !== 'undefined' && errors && errors.captcha) { %>
+            <p class="text-xs text-error mt-1 text-center"><%= errors.captcha %></p>
           <% } %>
         </div>
       <% } %>
@@ -71,13 +74,13 @@
     </form>
 
     <div class="flex items-center justify-between text-sm mt-5">
-      <a href="/auth/forgot-password" class="text-[#B86F45] hover:text-[#8A4A25] font-medium">Quên mật khẩu?</a>
-      <a href="/auth/register" class="text-[#354B35] hover:text-[#273727] font-semibold">Tạo tài khoản</a>
+      <a href="/forgot" class="text-[#B86F45] hover:text-[#8A4A25] font-medium">Quên mật khẩu?</a>
+      <a href="/register" class="text-[#354B35] hover:text-[#273727] font-semibold">Tạo tài khoản</a>
     </div>
 
     <p class="text-center text-xs text-[#7A7062] mt-6">
-      Chưa nhận được email xác minh?
-      <a href="/auth/verify" class="text-[#B86F45] hover:text-[#8A4A25] underline">Gửi lại mã</a>
+      Chưa nhận được mã kích hoạt?
+      <a href="/activate" class="text-[#B86F45] hover:text-[#8A4A25] underline">Kích hoạt tài khoản</a>
     </p>
   </div>
 </div>
@@ -100,7 +103,9 @@
       if (remaining <= 0) {
         window.clearInterval(timer);
         submit.disabled = false;
-        if (countdown) countdown.textContent = '0';
+        if (countdown && countdown.parentElement) {
+          countdown.parentElement.textContent = 'Thời gian khóa đã hết. Bạn có thể thử lại.';
+        }
       }
     }, 1000);
   })();

@@ -11,10 +11,12 @@ const {
   validatePasswordReset
 } = require('../validators/auth.validator');
 const { consumeFixedWindow } = require('../services/rate-limit.service');
+const crypto = require('crypto');
 const {
   registerUser,
   activateUser,
-  resendActivationOtp
+  resendActivationOtp,
+  loginUser
 } = require('../services/custom-auth.service');
 
 function authLocals(req, extra = {}) {
@@ -240,27 +242,106 @@ async function resendActivation(req, res, next) {
   }
 }
 
-// Placeholder stubs for Bước 5, 6, 7 (sẽ triển khai chi tiết ở các bước sau)
+// ==========================================
+// BƯỚC 5: ĐĂNG NHẬP VÀ CHỐNG BRUTE FORCE
+// ==========================================
+
 async function renderLoginPage(req, res) {
   const flash = req.session.flash || {};
   delete req.session.flash;
+
+  const nextPath = safeNextPath(req.query.next);
+  const email = flash.email || '';
+
   return res.render('auth/login', {
     pageTitle: 'Đăng Nhập',
     currentPath: req.path,
     csrfToken: resLocalsCsrf(req),
     recaptchaSiteKey: config.RECAPTCHA_SITE_KEY,
-    email: flash.email || '',
+    email,
     errors: {},
     errorMessage: flash.errorMessage || null,
     notice: flash.notice || null,
-    captchaRequired: false,
-    next: safeNextPath(req.query.next) || ''
+    captchaRequired: Boolean(flash.captchaRequired),
+    retryAfterSeconds: flash.retryAfterSeconds || 0,
+    next: nextPath || ''
   });
 }
 
 async function login(req, res, next) {
-  // Sẽ triển khai chi tiết ở BƯỚC 5
-  return res.redirect(303, '/dishes');
+  try {
+    const ip = req.ip;
+    const body = req.body || {};
+    const email = String(body.email || '').trim();
+    const password = String(body.password || '');
+    const captchaToken = body['g-recaptcha-response'] || body.recaptchaToken;
+    const nextPath = safeNextPath(body.next || req.query.next);
+
+    const validation = validateLogin({ email, password });
+    if (!validation.success) {
+      return res.status(200).render('auth/login', {
+        pageTitle: 'Đăng Nhập',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        recaptchaSiteKey: config.RECAPTCHA_SITE_KEY,
+        email,
+        errors: validation.errors,
+        errorMessage: 'Vui lòng nhập đầy đủ email và mật khẩu.',
+        notice: null,
+        captchaRequired: false,
+        next: nextPath || ''
+      });
+    }
+
+    const result = await loginUser({
+      email: validation.data.email,
+      password: validation.data.password,
+      ip,
+      captchaToken
+    });
+
+    if (!result.success) {
+      if (result.status === 429) {
+        return res.status(429).render('errors/429', {
+          pageTitle: 'Tài Khoản Tạm Khóa',
+          title: 'Đăng Nhập Thất Bại Quá Nhiều Lần',
+          message: result.message
+        });
+      }
+
+      return res.status(200).render('auth/login', {
+        pageTitle: 'Đăng Nhập',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        recaptchaSiteKey: config.RECAPTCHA_SITE_KEY,
+        email: result.email || email,
+        errors: result.error === 'CAPTCHA_REQUIRED' ? { captcha: result.message } : {},
+        errorMessage: result.message,
+        isPendingUser: Boolean(result.isPendingUser),
+        notice: null,
+        captchaRequired: Boolean(result.captchaRequired),
+        next: nextPath || ''
+      });
+    }
+
+    // Đăng nhập thành công:
+    // 6. regenerate session (sid mới), gán userId, xóa bộ đếm login-email, 303 tới next an toàn hoặc /dishes
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+
+      req.session.userId = result.user.id;
+      // Sinh csrf token mới cho session sau login
+      req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+
+      req.session.save((saveErr) => {
+        if (saveErr) return next(saveErr);
+        const target = nextPath || '/dishes';
+        return res.redirect(303, target);
+      });
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function logout(req, res, next) {

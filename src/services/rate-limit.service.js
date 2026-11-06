@@ -191,11 +191,11 @@ async function recordLoginFailure(key, windowMs, lockThreshold, lockDurationMs) 
  */
 async function resetRateLimitKey(key) {
   try {
-    await prisma.rateLimit.delete({
+    await prisma.rateLimit.deleteMany({
       where: { key }
     });
   } catch (err) {
-    // Record might not exist, ignore P2025
+    // Ignore error
   }
 }
 

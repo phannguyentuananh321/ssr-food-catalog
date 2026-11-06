@@ -299,10 +299,126 @@ async function resendActivationOtp({ email }) {
   };
 }
 
+const GENERIC_LOGIN_ERROR = 'Email hoặc mật khẩu không chính xác.';
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 phút
+const LOGIN_LOCK_DURATION_MS = 5 * 60 * 1000; // 5 phút
+
+/**
+ * BƯỚC 5: Xử lý đăng nhập và chống Brute Force
+ */
+async function loginUser({ email, password, ip, captchaToken }) {
+  const normalizedEmail = normalizeEmail(email);
+  const emailKey = `login-email:${normalizedEmail}`;
+  const ipKey = `login-ip:${ip}`;
+
+  // 1. Kiểm tra khóa: Nếu login-ip hoặc login-email đang lockedUntil thì 429
+  // (kể cả CAPTCHA đúng, KHÔNG kiểm tra password)
+  const emailStatus = await getRateLimitStatus(emailKey, LOGIN_WINDOW_MS);
+  const ipStatus = await getRateLimitStatus(ipKey, LOGIN_WINDOW_MS);
+
+  if (emailStatus.locked || ipStatus.locked) {
+    const lockedUntil = (emailStatus.locked && emailStatus.lockedUntil) || ipStatus.lockedUntil;
+    const retryAfter = lockedUntil ? Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000)) : 300;
+    return {
+      status: 429,
+      error: 'LOCKED',
+      message: `Tài khoản hoặc địa chỉ IP đang tạm khóa do nhiều lần đăng nhập không thành công. Vui lòng thử lại sau ${retryAfter} giây.`,
+      retryAfterSeconds: retryAfter
+    };
+  }
+
+  // 2. Nếu số lần sai của email từ 3 trở lên thì bắt buộc reCAPTCHA hợp lệ
+  const captchaRequired = emailStatus.count >= 3;
+  if (captchaRequired) {
+    const { verifyRecaptcha } = require('../lib/recaptcha');
+    const isCaptchaOk = await verifyRecaptcha(captchaToken, ip);
+    if (!isCaptchaOk) {
+      // Thiếu hoặc sai thì hiện lại form kèm widget mới, giữ email, bỏ password, KHÔNG kiểm tra password
+      return {
+        status: 200,
+        error: 'CAPTCHA_REQUIRED',
+        captchaRequired: true,
+        message: 'Vui lòng xác minh mã reCAPTCHA.',
+        email: normalizedEmail
+      };
+    }
+  }
+
+  // 3. Tra user theo email chuẩn hóa, verify Argon2id (user không tồn tại thì verify với hash giả)
+  const user = await prisma.user.findUnique({
+    where: { emailNormalized: normalizedEmail }
+  });
+
+  let isPasswordValid = false;
+  if (user) {
+    isPasswordValid = await verifyPassword(user.passwordHash, password);
+  } else {
+    isPasswordValid = await verifyDummy(password);
+  }
+
+  // 4. Sai (kể cả email không tồn tại)
+  if (!isPasswordValid) {
+    // Tăng bộ đếm email (ngưỡng 10 khóa 5 phút)
+    const updatedEmailThrottle = await recordLoginFailure(emailKey, LOGIN_WINDOW_MS, 10, LOGIN_LOCK_DURATION_MS);
+    // Tăng bộ đếm IP (ngưỡng 30 khóa 5 phút)
+    const updatedIpThrottle = await recordLoginFailure(ipKey, LOGIN_WINDOW_MS, 30, LOGIN_LOCK_DURATION_MS);
+
+    // Kiểm tra xem có bị khóa ngay sau lần này không
+    const isNowLocked = Boolean(
+      (updatedEmailThrottle.lockedUntil && updatedEmailThrottle.lockedUntil.getTime() > Date.now()) ||
+      (updatedIpThrottle.lockedUntil && updatedIpThrottle.lockedUntil.getTime() > Date.now())
+    );
+
+    if (isNowLocked) {
+      const lockedUntil = (updatedEmailThrottle.lockedUntil && updatedEmailThrottle.lockedUntil.getTime() > Date.now())
+        ? updatedEmailThrottle.lockedUntil
+        : updatedIpThrottle.lockedUntil;
+      const retryAfter = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000));
+      return {
+        status: 429,
+        error: 'LOCKED',
+        message: `Bạn đã nhập sai quá số lần cho phép. Tạm khóa trong ${retryAfter} giây.`,
+        retryAfterSeconds: retryAfter
+      };
+    }
+
+    const nextCaptchaRequired = updatedEmailThrottle.count >= 3;
+    return {
+      status: 200,
+      error: 'INVALID_CREDENTIALS',
+      message: GENERIC_LOGIN_ERROR,
+      captchaRequired: nextCaptchaRequired,
+      email: normalizedEmail
+    };
+  }
+
+  // 5. Password đúng nhưng tài khoản pending: không tạo session, không tính là một lần sai,
+  // báo cần kích hoạt kèm link tới /activate
+  if (user.status === 'pending') {
+    return {
+      status: 200,
+      error: 'ACCOUNT_PENDING',
+      isPendingUser: true,
+      message: 'Tài khoản của bạn chưa được kích hoạt. Vui lòng nhập mã OTP để kích hoạt.',
+      email: normalizedEmail
+    };
+  }
+
+  // 6. Thành công: xóa bộ đếm login-email (không xóa login-ip)
+  await resetRateLimitKey(emailKey);
+
+  return {
+    success: true,
+    user
+  };
+}
+
 module.exports = {
   INVALID_OTP_MESSAGE,
   GENERIC_REGISTER_NOTICE,
+  GENERIC_LOGIN_ERROR,
   registerUser,
   activateUser,
-  resendActivationOtp
+  resendActivationOtp,
+  loginUser
 };
