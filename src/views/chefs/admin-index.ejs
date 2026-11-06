@@ -143,6 +143,7 @@
     </p>
 
     <form id="deleteChefForm" method="POST" action="">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
       <input type="hidden" name="_method" value="DELETE" />
       <div class="modal-action flex justify-end gap-3 mt-6">
         <button type="button" onclick="closeChefDeleteModal()" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#292820] border border-[#E9E0D2] rounded-xl px-4">

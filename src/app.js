@@ -2,8 +2,14 @@ const path = require('path');
 const express = require('express');
 const expressLayouts = require('express-ejs-layouts');
 const methodOverride = require('method-override');
+const session = require('express-session');
 
 const { config, validateEnv } = require('./config/env');
+const { PrismaSessionStore } = require('./lib/session-store');
+const { csrfMiddleware } = require('./middleware/csrf');
+const { attachUser, requireAuth } = require('./middleware/auth');
+const { notFoundHandler, globalErrorHandler } = require('./middleware/error-handler');
+
 const dishRoutes = require('./routes/dish.routes');
 const chefRoutes = require('./routes/chef.routes');
 const ingredientRoutes = require('./routes/ingredient.routes');
@@ -11,19 +17,14 @@ const bookmarkRoutes = require('./routes/bookmark.routes');
 const apiRoutes = require('./routes/api.routes');
 const adminRoutes = require('./routes/admin.routes');
 const authRoutes = require('./routes/auth.routes');
-const { attachAuth, requireAuth } = require('./middleware/auth');
-const { notFoundHandler, globalErrorHandler } = require('./middleware/error-handler');
 
 // Validate environment variables on startup
 validateEnv(false);
 
 const app = express();
 
-// Behind a production reverse proxy, trust exactly one hop so req.ip is usable
-// for rate limiting without accepting arbitrary client-supplied forwarding.
-if (config.isProduction) {
-  app.set('trust proxy', 1);
-}
+// Trust proxy for secure cookies and accurate IP rate limiting behind reverse proxies
+app.set('trust proxy', 1);
 
 // View Engine & Layout Configuration
 app.set('view engine', 'ejs');
@@ -52,14 +53,51 @@ app.use(methodOverride(function (req, res) {
 // Static Assets
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// Supabase Auth session (verified server-side on every request)
-app.use(attachAuth);
+// Session configuration
+app.use(session({
+  name: 'sid',
+  secret: config.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: true,
+  rolling: true,
+  store: new PrismaSessionStore(),
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: config.isProduction,
+    path: '/',
+    maxAge: 24 * 60 * 60 * 1000 // 24 giờ cho phiên đăng nhập, phiên ẩn danh sẽ được chỉnh ở attachUser
+  }
+}));
 
-// Public auth entry points (login, register, verification, recovery)
-app.use('/auth', authRoutes);
+// CSRF Protection (đọc từ body, query ?_csrf= hoặc header)
+app.use(csrfMiddleware);
 
-// Everything below requires a valid Supabase session. API requests receive
-// 401 JSON; browser requests are redirected to the login page.
+// Attach user from session
+app.use(attachUser);
+
+// Cung cấp biến tiện ích cho templates
+app.use((req, res, next) => {
+  res.locals.loggedIn = Boolean(req.user);
+  res.locals.currentPath = req.path;
+  res.locals.recaptchaSiteKey = config.RECAPTCHA_SITE_KEY;
+  next();
+});
+
+// Referrer-Policy: no-referrer cho /reset
+app.use((req, res, next) => {
+  if (req.path === '/reset' || req.path === '/auth/reset') {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+  }
+  next();
+});
+
+// Public Authentication Routes (không yêu cầu đăng nhập)
+app.use('/', authRoutes);
+app.use('/auth', authRoutes); // Tương thích đường dẫn /auth/*
+
+// Everything below requires an authenticated active session.
+// API requests receive 401 JSON; browser requests are redirected to /login?next=...
 app.use(requireAuth);
 
 // Root Redirect to default Public Catalog
@@ -78,7 +116,7 @@ app.use('/bookmarks', bookmarkRoutes);
 // JSON fragments for Load More / Infinite Scroll and bookmark resolution
 app.use('/api', apiRoutes);
 
-// Admin Portal Routes
+// Admin Portal Routes (chỉ yêu cầu đăng nhập, không chặn theo role)
 app.use('/admin', adminRoutes);
 
 // 404 & Global Error Handling Middleware

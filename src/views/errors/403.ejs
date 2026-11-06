@@ -12,7 +12,8 @@
     <a href="/dishes" class="btn bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none px-6 rounded-xl font-medium">
       Về Danh Sách Món Ăn
     </a>
-    <form method="POST" action="/auth/logout">
+    <form method="POST" action="/logout">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
       <button type="submit" class="btn bg-[#FFFDF8] hover:bg-[#FAF5EC] text-[#292820] border border-[#E9E0D2] px-6 rounded-xl font-medium">
         Đăng Xuất
       </button>

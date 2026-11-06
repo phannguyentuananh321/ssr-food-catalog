@@ -16,10 +16,12 @@
   <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-3xl p-8 sm:p-10 shadow-xs">
     <form 
       method="POST" 
-      action="<%= isEdit ? '/admin/chefs/' + chef.id + '?_method=PATCH' : '/admin/chefs' %>" 
+      action="<%= isEdit ? '/admin/chefs/' + chef.id + '?_method=PATCH&_csrf=' + (typeof csrfToken !== 'undefined' ? csrfToken : '') : '/admin/chefs?_csrf=' + (typeof csrfToken !== 'undefined' ? csrfToken : '') %>" 
       enctype="multipart/form-data" 
       class="space-y-6">
       
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
+
       <% if (isEdit) { %>
         <input type="hidden" name="_method" value="PATCH" />
       <% } %>

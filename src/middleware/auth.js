@@ -1,20 +1,4 @@
-const { config } = require('../config/env');
-const { createSupabaseServerClient } = require('../lib/supabase-server');
-
-function isEmailVerified(user) {
-  return Boolean(user && (user.email_confirmed_at || user.confirmed_at));
-}
-
-/**
- * The single admin is the verified Supabase user whose email equals the
- * server-only ADMIN_EMAIL value. Never trust a role/flag from the client.
- */
-function isAdminUser(user) {
-  if (!user || !user.email || !config.ADMIN_EMAIL || !isEmailVerified(user)) {
-    return false;
-  }
-  return user.email.trim().toLowerCase() === config.ADMIN_EMAIL;
-}
+const prisma = require('../lib/prisma');
 
 function safeNextPath(value) {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) {
@@ -34,46 +18,68 @@ function wantsJson(req) {
 }
 
 /**
- * Creates the request-scoped Supabase client and verifies the access token
- * against Supabase Auth. The user object is always derived server-side.
+ * Middleware attachUser:
+ * Nạp User theo session.userId từ database, chỉ chấp nhận status active,
+ * ngược lại hủy session và xóa cookie.
  */
-async function attachAuth(req, res, next) {
-  req.supabase = null;
+async function attachUser(req, res, next) {
   req.user = null;
   res.locals.currentUser = null;
-  res.locals.isAdmin = false;
-  res.locals.turnstileSiteKey = config.TURNSTILE_SITE_KEY;
+  res.locals.user = null;
 
-  if (!config.SUPABASE_URL || !config.SUPABASE_ANON_KEY) {
-    res.locals.authConfigured = false;
+  if (!req.session) {
     return next();
   }
 
-  res.locals.authConfigured = true;
-  req.supabase = createSupabaseServerClient(req, res);
-
-  try {
-    const { data, error } = await req.supabase.auth.getUser();
-    if (!error && data && data.user) {
-      req.user = data.user;
-      const username = data.user.user_metadata && data.user.user_metadata.username;
-      res.locals.currentUser = {
-        id: data.user.id,
-        email: data.user.email,
-        username: username || null,
-        emailVerified: isEmailVerified(data.user)
-      };
-      res.locals.isAdmin = isAdminUser(data.user);
-    }
-  } catch (error) {
-    console.error('[AUTH ATTACH ERROR]:', error.message);
+  // Quản lý thời hạn cookie: phiên ẩn danh 30 phút, phiên đăng nhập 24 giờ
+  if (!req.session.userId) {
+    req.session.cookie.maxAge = 30 * 60 * 1000; // 30 phút cho phiên ẩn danh
+    return next();
   }
 
-  return next();
+  // Người dùng đã có session userId
+  req.session.cookie.maxAge = 24 * 60 * 60 * 1000; // 24 giờ cho phiên đăng nhập
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.session.userId }
+    });
+
+    if (user && user.status === 'active') {
+      req.user = user;
+      res.locals.currentUser = {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName || user.email.split('@')[0],
+        role: user.role,
+        status: user.status
+      };
+      res.locals.user = res.locals.currentUser;
+      return next();
+    }
+
+    // Tài khoản không tồn tại hoặc không ở trạng thái active -> hủy session
+    req.session.destroy(() => {
+      res.clearCookie('sid');
+      req.user = null;
+      res.locals.currentUser = null;
+      res.locals.user = null;
+      return next();
+    });
+  } catch (err) {
+    console.error('[ATTACH USER ERROR]:', err.message);
+    return next();
+  }
 }
 
+/**
+ * Middleware requireAuth:
+ * Trang HTML thì 303 tới /login?next=... (giữ kiểm tra open redirect); /api/* thì 401 JSON.
+ */
 function requireAuth(req, res, next) {
-  if (req.user) return next();
+  if (req.user) {
+    return next();
+  }
 
   if (wantsJson(req)) {
     return res.status(401).json({
@@ -84,38 +90,31 @@ function requireAuth(req, res, next) {
 
   const nextPath = safeNextPath(req.originalUrl);
   const suffix = nextPath ? `?next=${encodeURIComponent(nextPath)}` : '';
-  return res.redirect(303, `/auth/login${suffix}`);
+  return res.redirect(303, `/login${suffix}`);
 }
 
+/**
+ * Thay thế requireAdmin:
+ * Đặc tả: Mọi route (toàn bộ cụm CRUD và /admin/*) chỉ yêu cầu đăng nhập, KHÔNG chặn theo role.
+ * Gỡ requireAdmin và ADMIN_EMAIL; giữ view 403 để dành cho sau.
+ */
 function requireAdmin(req, res, next) {
-  if (!req.user) return requireAuth(req, res, next);
-
-  if (isAdminUser(req.user)) return next();
-
-  if (wantsJson(req)) {
-    return res.status(403).json({
-      error: 'FORBIDDEN',
-      message: 'Bạn không có quyền truy cập khu vực quản trị.'
-    });
-  }
-
-  return res.status(403).render('errors/403', {
-    pageTitle: 'Không Có Quyền Truy Cập',
-    currentPath: req.path
-  });
+  return requireAuth(req, res, next);
 }
 
 function redirectIfAuthenticated(req, res, next) {
-  if (!req.user) return next();
-  return res.redirect(303, '/dishes');
+  if (req.user) {
+    return res.redirect(303, '/dishes');
+  }
+  return next();
 }
 
 module.exports = {
-  attachAuth,
+  attachUser,
+  attachAuth: attachUser, // Alias để tương thích nếu cần
   requireAuth,
   requireAdmin,
   redirectIfAuthenticated,
-  isAdminUser,
-  isEmailVerified,
-  safeNextPath
+  safeNextPath,
+  wantsJson
 };

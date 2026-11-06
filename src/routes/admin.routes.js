@@ -6,11 +6,10 @@ const dishController = require('../controllers/dish.controller');
 const chefController = require('../controllers/chef.controller');
 const ingredientController = require('../controllers/ingredient.controller');
 const adminSearchController = require('../controllers/admin-search.controller');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
-// Defense in depth: every admin page and admin API requires the single
-// ADMIN_EMAIL account, regardless of what the UI shows.
-router.use(requireAdmin);
+// Defense in depth: all admin routes require an active authenticated user
+router.use(requireAuth);
 
 // ==========================================
 // 0. ADMIN RELATION SEARCH (Dish form)

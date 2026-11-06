@@ -55,26 +55,25 @@
                 <%= currentUser.email %>
               </li>
               <li><a href="/bookmarks">Đã Lưu</a></li>
-              <% if (admin) { %>
-                <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold mt-2">Quản trị</li>
-                <li>
-                  <a href="/admin/dishes" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/dishes')) ? 'active font-bold text-[#354B35]' : '' %>">
-                    🍳 Quản lý Món ăn
-                  </a>
-                </li>
-                <li>
-                  <a href="/admin/chefs" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/chefs')) ? 'active font-bold text-[#354B35]' : '' %>">
-                    👨‍🍳 Quản lý Đầu bếp
-                  </a>
-                </li>
-                <li>
-                  <a href="/admin/ingredients" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/ingredients')) ? 'active font-bold text-[#354B35]' : '' %>">
-                    🌿 Quản lý Nguyên liệu
-                  </a>
-                </li>
-              <% } %>
+              <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold mt-2">Quản trị</li>
+              <li>
+                <a href="/admin/dishes" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/dishes')) ? 'active font-bold text-[#354B35]' : '' %>">
+                  🍳 Quản lý Món ăn
+                </a>
+              </li>
+              <li>
+                <a href="/admin/chefs" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/chefs')) ? 'active font-bold text-[#354B35]' : '' %>">
+                  👨‍🍳 Quản lý Đầu bếp
+                </a>
+              </li>
+              <li>
+                <a href="/admin/ingredients" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/ingredients')) ? 'active font-bold text-[#354B35]' : '' %>">
+                  🌿 Quản lý Nguyên liệu
+                </a>
+              </li>
               <li class="mt-2">
-                <form method="POST" action="/auth/logout">
+                <form method="POST" action="/logout">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="w-full text-left text-[#B86F45]">Đăng xuất</button>
                 </form>
               </li>
@@ -83,10 +82,10 @@
         </div>
       <% } else { %>
         <div class="hidden md:flex items-center gap-3">
-          <a href="/auth/login" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] font-medium">
+          <a href="/login" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] font-medium">
             Đăng Nhập
           </a>
-          <a href="/auth/register" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none font-medium">
+          <a href="/register" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none font-medium">
             Đăng Ký
           </a>
         </div>
@@ -113,20 +112,19 @@
                   <span data-bookmark-count class="hidden badge badge-sm bg-[#B86F45] text-[#FFFDF8] border-none">0</span>
                 </a>
               </li>
-              <% if (admin) { %>
-                <li class="menu-title text-xs text-[#B86F45] uppercase font-bold mt-2">Quản trị</li>
-                <li><a href="/admin/dishes">Quản lý Món ăn</a></li>
-                <li><a href="/admin/chefs">Quản lý Đầu bếp</a></li>
-                <li><a href="/admin/ingredients">Quản lý Nguyên liệu</a></li>
-              <% } %>
+              <li class="menu-title text-xs text-[#B86F45] uppercase font-bold mt-2">Quản trị</li>
+              <li><a href="/admin/dishes">Quản lý Món ăn</a></li>
+              <li><a href="/admin/chefs">Quản lý Đầu bếp</a></li>
+              <li><a href="/admin/ingredients">Quản lý Nguyên liệu</a></li>
               <li class="mt-2">
-                <form method="POST" action="/auth/logout">
+                <form method="POST" action="/logout">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="text-left text-[#B86F45]">Đăng xuất</button>
                 </form>
               </li>
             <% } else { %>
-              <li><a href="/auth/login">Đăng Nhập</a></li>
-              <li><a href="/auth/register">Đăng Ký</a></li>
+              <li><a href="/login">Đăng Nhập</a></li>
+              <li><a href="/register">Đăng Ký</a></li>
             <% } %>
           </ul>
         </div>
