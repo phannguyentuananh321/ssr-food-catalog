@@ -4,33 +4,39 @@ const dotenv = require('dotenv');
 // Load .env from project root
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-// Cloudflare's official test keys start with 1x/2x/3x; real widget keys start with 0x.
-const TURNSTILE_TEST_KEY_PATTERN = /^[123]x0{5,}/i;
+const GOOGLE_RECAPTCHA_TEST_SITE_KEY = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
 
 const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT, 10) || 3000,
-  APP_BASE_URL: process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
-  
+  APP_BASE_URL: (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/+$/, ''),
+
   // Database connection
   DATABASE_URL: process.env.DATABASE_URL || '',
   DIRECT_URL: process.env.DIRECT_URL || '',
 
-  // Supabase Storage
+  // Supabase Storage (only for media files)
   SUPABASE_URL: process.env.SUPABASE_URL || '',
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
   SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET || 'dish-images',
 
-  // Session secret (legacy; Supabase Auth manages sessions via its own cookies)
-  SESSION_SECRET: process.env.SESSION_SECRET || 'dev_secret_key_change_in_production_min32chars',
+  // Session Secret (minimum 32 characters)
+  SESSION_SECRET: process.env.SESSION_SECRET || '',
 
-  // Authorization: the single admin account is defined by the server environment
-  ADMIN_EMAIL: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  // OTP Pepper (minimum 32 characters)
+  OTP_PEPPER: process.env.OTP_PEPPER || '',
 
-  // Cloudflare Turnstile (server-side verification)
-  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY || '',
-  TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY || '',
+  // Google reCAPTCHA v2 (server-side verification)
+  RECAPTCHA_SITE_KEY: process.env.RECAPTCHA_SITE_KEY || '',
+  RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY || '',
+
+  // SMTP Configuration
+  SMTP_HOST: process.env.SMTP_HOST || '',
+  SMTP_PORT: parseInt(process.env.SMTP_PORT, 10) || 587,
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  MAIL_FROM: process.env.MAIL_FROM || 'no-reply@amvi.local',
 
   // Registration rate limit (per IP, fixed window)
   REGISTRATION_LIMIT: parseInt(process.env.REGISTRATION_LIMIT, 10) || 5,
@@ -40,16 +46,11 @@ const config = {
   isDevelopment: process.env.NODE_ENV !== 'production'
 };
 
-/**
- * Detect Cloudflare's official test keys. They always pass siteverify and
- * render a "Testing only" badge, so they must never reach production.
- */
-function isTurnstileTestKey(
-  siteKey = config.TURNSTILE_SITE_KEY,
-  secretKey = config.TURNSTILE_SECRET_KEY
+function isRecaptchaTestKey(
+  siteKey = config.RECAPTCHA_SITE_KEY,
+  secretKey = config.RECAPTCHA_SECRET_KEY
 ) {
-  const matches = (value) => TURNSTILE_TEST_KEY_PATTERN.test(String(value || ''));
-  return matches(siteKey) || matches(secretKey);
+  return siteKey === GOOGLE_RECAPTCHA_TEST_SITE_KEY || secretKey === GOOGLE_RECAPTCHA_TEST_SECRET_KEY;
 }
 
 /**
@@ -63,36 +64,44 @@ function validateEnv(strict = false) {
     missing.push('DATABASE_URL');
   }
 
-  // Production must have working auth, storage and CAPTCHA configuration.
+  // Session & OTP secrets length checks
+  if (!config.SESSION_SECRET) {
+    missing.push('SESSION_SECRET');
+  } else if (config.SESSION_SECRET.length < 32) {
+    throw new Error('[CONFIG ERROR] SESSION_SECRET must be at least 32 characters long.');
+  }
+
+  if (!config.OTP_PEPPER) {
+    missing.push('OTP_PEPPER');
+  } else if (config.OTP_PEPPER.length < 32) {
+    throw new Error('[CONFIG ERROR] OTP_PEPPER must be at least 32 characters long.');
+  }
+
+  // Required in production
   if (config.isProduction) {
     if (!config.SUPABASE_URL) missing.push('SUPABASE_URL');
     if (!config.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
-    if (!config.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
-    if (!config.ADMIN_EMAIL) missing.push('ADMIN_EMAIL');
-    if (!process.env.SESSION_SECRET) missing.push('SESSION_SECRET');
-    if (!config.TURNSTILE_SITE_KEY) missing.push('TURNSTILE_SITE_KEY');
-    if (!config.TURNSTILE_SECRET_KEY) missing.push('TURNSTILE_SECRET_KEY');
+    if (!config.RECAPTCHA_SITE_KEY) missing.push('RECAPTCHA_SITE_KEY');
+    if (!config.RECAPTCHA_SECRET_KEY) missing.push('RECAPTCHA_SECRET_KEY');
+    if (!config.SMTP_HOST) missing.push('SMTP_HOST');
+    if (!config.SMTP_PORT) missing.push('SMTP_PORT');
+    if (!config.SMTP_USER) missing.push('SMTP_USER');
+    if (!config.SMTP_PASS) missing.push('SMTP_PASS');
+    if (!config.MAIL_FROM) missing.push('MAIL_FROM');
+    if (!config.APP_BASE_URL) missing.push('APP_BASE_URL');
   }
 
-  if (config.isProduction && isTurnstileTestKey()) {
+  if (config.isProduction && isRecaptchaTestKey()) {
     throw new Error(
-      '[CONFIG ERROR] Cloudflare Turnstile test keys are not allowed in production.\n' +
-      'Create a real widget at https://dash.cloudflare.com -> Turnstile and set ' +
-      'TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY in .env.'
-    );
-  }
-
-  if (!config.isProduction && isTurnstileTestKey()) {
-    console.warn(
-      '[CONFIG WARNING] Cloudflare Turnstile is using official TEST keys: the widget shows ' +
-      '"Testing only" and siteverify always passes. Create a real widget before deploying.'
+      '[CONFIG ERROR] Google reCAPTCHA test keys are not allowed in production.\n' +
+      'Set real RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY in .env.'
     );
   }
 
   if (missing.length > 0) {
     const errorMsg = `[CONFIG WARNING] Missing required environment variable(s): ${missing.join(', ')}.\n` +
       `Please check your root .env file. See .env.example for guidance.`;
-    
+
     if (strict || config.isProduction) {
       throw new Error(errorMsg);
     } else {
@@ -106,5 +115,5 @@ function validateEnv(strict = false) {
 module.exports = {
   config,
   validateEnv,
-  isTurnstileTestKey
+  isRecaptchaTestKey
 };

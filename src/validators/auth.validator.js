@@ -1,45 +1,80 @@
 const { z } = require('zod');
+const { isCommonPassword } = require('../lib/common-passwords');
+const { normalizeEmail } = require('../lib/tokens');
 
-const emailSchema = z.string({ required_error: 'Email là bắt buộc' })
+const emailSchema = z.string({ required_error: 'Vui lòng nhập email' })
   .trim()
-  .toLowerCase()
-  .email('Email không hợp lệ')
-  .max(254, 'Email quá dài');
+  .email('Email không đúng định dạng');
 
-const passwordSchema = z.string({ required_error: 'Mật khẩu là bắt buộc' })
-  .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
-  .max(72, 'Mật khẩu không được vượt quá 72 ký tự');
+const passwordSchema = z.string({ required_error: 'Vui lòng nhập mật khẩu' })
+  .min(10, 'Mật khẩu phải có từ 10 đến 64 ký tự')
+  .max(64, 'Mật khẩu phải có từ 10 đến 64 ký tự')
+  .refine((val) => !isCommonPassword(val), {
+    message: 'Mật khẩu quá phổ biến và dễ đoán. Vui lòng chọn mật khẩu mạnh hơn'
+  });
 
 const registerSchema = z.object({
-  username: z.string({ required_error: 'Tên đăng nhập là bắt buộc' })
-    .trim()
-    .min(3, 'Tên đăng nhập phải có ít nhất 3 ký tự')
-    .max(32, 'Tên đăng nhập không được vượt quá 32 ký tự')
-    .regex(/^[\p{L}\p{N}_]+$/u, 'Tên đăng nhập chỉ gồm chữ, số và dấu gạch dưới'),
   email: emailSchema,
+  displayName: z.string()
+    .trim()
+    .max(50, 'Tên hiển thị tối đa 50 ký tự')
+    .optional()
+    .or(z.literal('')),
+  username: z.string().trim().max(50).optional().or(z.literal('')),
   password: passwordSchema,
-  confirmPassword: z.string({ required_error: 'Vui lòng xác nhận mật khẩu' })
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Mật khẩu xác nhận không khớp',
-  path: ['confirmPassword']
+  confirmPassword: z.string().optional()
+}).superRefine((data, ctx) => {
+  const normEmail = normalizeEmail(data.email);
+  const passwordLower = (data.password || '').toLowerCase();
+
+  // Mật khẩu khác email
+  if (data.email && (passwordLower === data.email.toLowerCase() || (normEmail && passwordLower === normEmail))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Mật khẩu không được trùng với email',
+      path: ['password']
+    });
+  }
+
+  if (data.confirmPassword !== undefined && data.confirmPassword !== data.password) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Mật khẩu xác nhận không khớp',
+      path: ['confirmPassword']
+    });
+  }
 });
 
 const loginSchema = z.object({
   email: emailSchema,
-  password: z.string({ required_error: 'Mật khẩu là bắt buộc' }).min(1, 'Mật khẩu là bắt buộc').max(200)
+  password: z.string({ required_error: 'Vui lòng nhập mật khẩu' }).min(1, 'Vui lòng nhập mật khẩu')
+});
+
+const activateSchema = z.object({
+  email: emailSchema,
+  otp: z.string({ required_error: 'Vui lòng nhập mã OTP' }).trim().regex(/^\d{6}$/, 'Mã OTP gồm 6 chữ số')
+});
+
+const resendOtpSchema = z.object({
+  email: emailSchema
+});
+
+const forgotSchema = z.object({
+  email: emailSchema
 });
 
 const passwordResetSchema = z.object({
+  token: z.string({ required_error: 'Token không hợp lệ' }).min(1, 'Token không hợp lệ'),
   password: passwordSchema,
-  confirmPassword: z.string({ required_error: 'Vui lòng xác nhận mật khẩu' })
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Mật khẩu xác nhận không khớp',
-  path: ['confirmPassword']
-});
-
-const otpSchema = z.object({
-  email: emailSchema,
-  token: z.string({ required_error: 'Mã xác minh là bắt buộc' }).trim().min(4, 'Mã xác minh không hợp lệ').max(12)
+  confirmPassword: z.string().optional()
+}).superRefine((data, ctx) => {
+  if (data.confirmPassword !== undefined && data.confirmPassword !== data.password) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Mật khẩu xác nhận không khớp',
+      path: ['confirmPassword']
+    });
+  }
 });
 
 function flattenIssues(result) {
@@ -65,6 +100,27 @@ function validateLogin(data) {
     : { success: false, errors: flattenIssues(result) };
 }
 
+function validateActivate(data) {
+  const result = activateSchema.safeParse(data);
+  return result.success
+    ? { success: true, data: result.data }
+    : { success: false, errors: flattenIssues(result) };
+}
+
+function validateResendOtp(data) {
+  const result = resendOtpSchema.safeParse(data);
+  return result.success
+    ? { success: true, data: result.data }
+    : { success: false, errors: flattenIssues(result) };
+}
+
+function validateForgot(data) {
+  const result = forgotSchema.safeParse(data);
+  return result.success
+    ? { success: true, data: result.data }
+    : { success: false, errors: flattenIssues(result) };
+}
+
 function validatePasswordReset(data) {
   const result = passwordResetSchema.safeParse(data);
   return result.success
@@ -72,20 +128,20 @@ function validatePasswordReset(data) {
     : { success: false, errors: flattenIssues(result) };
 }
 
-function validateOtp(data) {
-  const result = otpSchema.safeParse(data);
-  return result.success
-    ? { success: true, data: result.data }
-    : { success: false, errors: flattenIssues(result) };
-}
-
 module.exports = {
+  emailSchema,
+  passwordSchema,
   registerSchema,
   loginSchema,
+  activateSchema,
+  resendOtpSchema,
+  forgotSchema,
   passwordResetSchema,
-  otpSchema,
+  flattenIssues,
   validateRegister,
   validateLogin,
-  validatePasswordReset,
-  validateOtp
+  validateActivate,
+  validateResendOtp,
+  validateForgot,
+  validatePasswordReset
 };
