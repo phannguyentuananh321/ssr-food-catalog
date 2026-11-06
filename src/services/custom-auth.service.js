@@ -413,12 +413,230 @@ async function loginUser({ email, password, ip, captchaToken }) {
   };
 }
 
+const GENERIC_FORGOT_NOTICE = 'Nếu email đã đăng ký, hướng dẫn đã được gửi.';
+
+/**
+ * BƯỚC 7: Yêu cầu đặt lại mật khẩu
+ */
+async function requestPasswordReset({ email, ip }) {
+  const normalizedEmail = normalizeEmail(email);
+  const emailKey = `forgot-email:${normalizedEmail}`;
+  const ipKey = `forgot-ip:${ip}`;
+
+  // Rate limit: forgot-email 3/giờ và forgot-ip 10/giờ, vượt thì 429
+  const emailRate = await consumeFixedWindow(emailKey, 3, 60 * 60 * 1000);
+  if (!emailRate.allowed) {
+    return {
+      status: 429,
+      error: 'RATE_LIMITED',
+      message: `Quá nhiều yêu cầu đặt lại mật khẩu cho email này. Thử lại sau ${emailRate.retryAfterSeconds} giây.`
+    };
+  }
+
+  const ipRate = await consumeFixedWindow(ipKey, 10, 60 * 60 * 1000);
+  if (!ipRate.allowed) {
+    return {
+      status: 429,
+      error: 'RATE_LIMITED',
+      message: `Quá nhiều yêu cầu từ địa chỉ IP này. Thử lại sau ${ipRate.retryAfterSeconds} giây.`
+    };
+  }
+
+  // Tra cứu User
+  const user = await prisma.user.findUnique({
+    where: { emailNormalized: normalizedEmail }
+  });
+
+  // User pending hoặc không tồn tại: không gửi gì
+  if (user && user.status === 'active') {
+    const now = new Date();
+
+    // Vô hiệu token chưa dùng cũ
+    await prisma.passwordReset.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null
+      },
+      data: {
+        usedAt: now
+      }
+    });
+
+    // Tạo token mới hạn 15 phút
+    const rawToken = generateResetToken();
+    const tokenHash = hashResetToken(rawToken);
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+
+    await prisma.passwordReset.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt
+      }
+    });
+
+    const resetUrl = `${config.APP_BASE_URL}/reset?token=${encodeURIComponent(rawToken)}`;
+
+    // Gửi email không đồng bộ (không await, bắt lỗi, log không kèm bí mật)
+    sendPasswordResetLink(user.email, resetUrl).catch((err) => {
+      console.error('[PASSWORD RESET MAIL ERROR]: Failed to send reset email');
+    });
+  }
+
+  // Luôn trả cùng một thông báo chung và cùng status
+  return {
+    success: true,
+    notice: GENERIC_FORGOT_NOTICE
+  };
+}
+
+/**
+ * BƯỚC 7: Kiểm tra token reset có hợp lệ không (dùng cho GET /reset)
+ * GET KHÔNG BAO GIỜ đổi dữ liệu hay đặt usedAt!
+ */
+async function checkResetTokenValid(rawToken) {
+  if (!rawToken || typeof rawToken !== 'string') {
+    return { valid: false, message: 'Thiếu mã xác thực đặt lại mật khẩu.' };
+  }
+
+  try {
+    const tokenHash = hashResetToken(rawToken);
+    const record = await prisma.passwordReset.findUnique({
+      where: { tokenHash },
+      include: { user: true }
+    });
+
+    if (!record) {
+      return { valid: false, message: 'Liên kết không tồn tại hoặc không hợp lệ.' };
+    }
+
+    if (record.usedAt !== null) {
+      return { valid: false, message: 'Liên kết đặt lại mật khẩu này đã được sử dụng.' };
+    }
+
+    if (record.expiresAt.getTime() <= Date.now()) {
+      return { valid: false, message: 'Liên kết đặt lại mật khẩu đã hết hạn (chỉ có hiệu lực trong 15 phút).' };
+    }
+
+    if (!record.user || record.user.status !== 'active') {
+      return { valid: false, message: 'Tài khoản liên kết không hợp lệ hoặc chưa được kích hoạt.' };
+    }
+
+    return { valid: true, record };
+  } catch (err) {
+    return { valid: false, message: 'Mã xác thực không hợp lệ.' };
+  }
+}
+
+/**
+ * BƯỚC 7: Thực hiện đổi mật khẩu bằng reset token (POST /reset)
+ */
+async function executePasswordReset({ token, newPassword }) {
+  if (!token || typeof token !== 'string') {
+    return { success: false, error: 'INVALID_TOKEN', message: 'Token không hợp lệ.' };
+  }
+
+  const tokenHash = hashResetToken(token);
+  const now = new Date();
+
+  // Kiểm tra token trước khi băm
+  const resetRecord = await prisma.passwordReset.findUnique({
+    where: { tokenHash },
+    include: { user: true }
+  });
+
+  if (!resetRecord || resetRecord.usedAt !== null || resetRecord.expiresAt.getTime() <= now.getTime()) {
+    return {
+      success: false,
+      error: 'INVALID_TOKEN',
+      message: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.'
+    };
+  }
+
+  const user = resetRecord.user;
+  if (!user || user.status !== 'active') {
+    return {
+      success: false,
+      error: 'INVALID_USER',
+      message: 'Tài khoản không ở trạng thái hợp lệ.'
+    };
+  }
+
+  // Băm mật khẩu mới
+  const passwordHash = await hashPassword(newPassword);
+
+  // Thực hiện trong một transaction
+  const txSuccess = await prisma.$transaction(async (tx) => {
+    // Cập nhật usedAt có điều kiện
+    const updatedReset = await tx.passwordReset.updateMany({
+      where: {
+        id: resetRecord.id,
+        usedAt: null
+      },
+      data: {
+        usedAt: now
+      }
+    });
+
+    if (updatedReset.count === 0) {
+      return false;
+    }
+
+    // Vô hiệu mọi token chưa dùng khác của user
+    await tx.passwordReset.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null
+      },
+      data: {
+        usedAt: now
+      }
+    });
+
+    // Cập nhật mật khẩu user
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash
+      }
+    });
+
+    // XÓA mọi Session có userId đó (buộc đăng xuất mọi thiết bị)
+    await tx.session.deleteMany({
+      where: {
+        userId: user.id
+      }
+    });
+
+    return true;
+  });
+
+  if (!txSuccess) {
+    return {
+      success: false,
+      error: 'INVALID_TOKEN',
+      message: 'Liên kết đặt lại mật khẩu đã được sử dụng trước đó.'
+    };
+  }
+
+  // Gửi email báo đã đổi mật khẩu (không chứa password)
+  sendPasswordChangedNotice(user.email).catch((err) => {
+    console.error('[PASSWORD CHANGED NOTICE ERROR]: Failed to send notification');
+  });
+
+  return { success: true };
+}
+
 module.exports = {
   INVALID_OTP_MESSAGE,
   GENERIC_REGISTER_NOTICE,
   GENERIC_LOGIN_ERROR,
+  GENERIC_FORGOT_NOTICE,
   registerUser,
   activateUser,
   resendActivationOtp,
-  loginUser
+  loginUser,
+  requestPasswordReset,
+  checkResetTokenValid,
+  executePasswordReset
 };

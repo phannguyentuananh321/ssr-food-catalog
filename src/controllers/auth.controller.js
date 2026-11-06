@@ -16,7 +16,10 @@ const {
   registerUser,
   activateUser,
   resendActivationOtp,
-  loginUser
+  loginUser,
+  requestPasswordReset,
+  checkResetTokenValid,
+  executePasswordReset
 } = require('../services/custom-auth.service');
 
 function authLocals(req, extra = {}) {
@@ -370,40 +373,137 @@ async function logout(req, res, next) {
   }
 }
 
+// ==========================================
+// BƯỚC 7: QUÊN MẬT KHẨU & ĐẶT LẠI MẬT KHẨU
+// ==========================================
+
 async function renderForgotPage(req, res) {
-  // Sẽ triển khai chi tiết ở BƯỚC 7
+  const flash = req.session.flash || {};
+  delete req.session.flash;
+
   return res.render('auth/forgot-password', {
     pageTitle: 'Quên Mật Khẩu',
     currentPath: req.path,
     csrfToken: resLocalsCsrf(req),
-    email: '',
+    email: flash.email || '',
     errors: {},
-    errorMessage: null,
-    notice: null
+    errorMessage: flash.errorMessage || null,
+    notice: flash.notice || null
   });
 }
 
 async function forgotPassword(req, res, next) {
-  // Sẽ triển khai chi tiết ở BƯỚC 7
-  return res.redirect(303, '/login');
+  try {
+    const email = String(req.body.email || '').trim();
+    const validation = validateForgot({ email });
+    if (!validation.success) {
+      return res.status(200).render('auth/forgot-password', {
+        pageTitle: 'Quên Mật Khẩu',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        email,
+        errors: validation.errors,
+        errorMessage: 'Email không đúng định dạng.',
+        notice: null
+      });
+    }
+
+    const result = await requestPasswordReset({
+      email: validation.data.email,
+      ip: req.ip
+    });
+
+    if (!result.success && result.status === 429) {
+      return res.status(429).render('errors/429', {
+        pageTitle: 'Quá Nhiều Yêu Cầu',
+        title: 'Giới Hạn Yêu Cầu Quên Mật Khẩu',
+        message: result.message
+      });
+    }
+
+    req.session.flash = {
+      notice: result.notice
+    };
+    return res.redirect(303, '/forgot');
+  } catch (error) {
+    return next(error);
+  }
 }
 
-async function renderResetPage(req, res) {
-  // Sẽ triển khai chi tiết ở BƯỚC 7
-  return res.render('auth/reset-password', {
-    pageTitle: 'Đặt Lại Mật Khẩu',
-    currentPath: req.path,
-    csrfToken: resLocalsCsrf(req),
-    token: req.query.token || '',
-    errors: {},
-    errorMessage: null,
-    notice: null
-  });
+async function renderResetPage(req, res, next) {
+  try {
+    // Header Referrer-Policy: no-referrer cho /reset
+    res.setHeader('Referrer-Policy', 'no-referrer');
+
+    const token = String(req.query.token || '').trim();
+    const tokenCheck = await checkResetTokenValid(token);
+
+    return res.render('auth/reset-password', {
+      pageTitle: 'Đặt Lại Mật Khẩu',
+      currentPath: req.path,
+      csrfToken: resLocalsCsrf(req),
+      token,
+      isValidToken: tokenCheck.valid,
+      tokenError: tokenCheck.valid ? null : tokenCheck.message,
+      errors: {},
+      errorMessage: null,
+      notice: null
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function resetPassword(req, res, next) {
-  // Sẽ triển khai chi tiết ở BƯỚC 7
-  return res.redirect(303, '/login');
+  try {
+    // Header Referrer-Policy: no-referrer cho /reset
+    res.setHeader('Referrer-Policy', 'no-referrer');
+
+    const token = String(req.body.token || '').trim();
+    const password = String(req.body.password || '');
+    const confirmPassword = String(req.body.confirmPassword || '');
+
+    const validation = validatePasswordReset({ token, password, confirmPassword });
+    if (!validation.success) {
+      return res.status(200).render('auth/reset-password', {
+        pageTitle: 'Đặt Lại Mật Khẩu',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        token,
+        isValidToken: true,
+        errors: validation.errors,
+        errorMessage: 'Vui lòng kiểm tra lại thông tin mật khẩu mới.',
+        notice: null
+      });
+    }
+
+    const result = await executePasswordReset({
+      token: validation.data.token,
+      newPassword: validation.data.password
+    });
+
+    if (!result.success) {
+      return res.status(200).render('auth/reset-password', {
+        pageTitle: 'Đặt Lại Mật Khẩu',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        token,
+        isValidToken: false,
+        tokenError: result.message,
+        errors: {},
+        errorMessage: result.message,
+        notice: null
+      });
+    }
+
+    // Đổi mật khẩu thành công: 303 tới /login kèm flash; KHÔNG tự đăng nhập
+    req.session.flash = {
+      notice: 'Mật khẩu đã được thay đổi thành công! Vui lòng đăng nhập với mật khẩu mới.'
+    };
+    return res.redirect(303, '/login');
+  } catch (error) {
+    return next(error);
+  }
 }
 
 module.exports = {
