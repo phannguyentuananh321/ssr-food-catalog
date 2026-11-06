@@ -44,7 +44,9 @@ class PrismaSessionStore extends session.Store {
       const sessionData = JSON.parse(record.data);
       return callback(null, sessionData);
     } catch (err) {
-      return callback(err);
+      // Graceful degradation: nếu DB quá tải hoặc lỗi mạng, fallback null để không crash 500 trang công khai
+      console.warn('[SESSION GET WARNING]:', err.message);
+      return callback(null, null);
     }
   }
 
@@ -79,7 +81,8 @@ class PrismaSessionStore extends session.Store {
 
       return callback(null);
     } catch (err) {
-      return callback(err);
+      console.warn('[SESSION SET WARNING]:', err.message);
+      return callback(null);
     }
   }
 
