@@ -5,7 +5,22 @@ let transporter = null;
 
 function getTransporter() {
   if (!transporter) {
-    if (config.SMTP_HOST) {
+    // Nếu đang chạy test hoặc cấu hình SMTP_HOST là test/mock
+    if (process.env.NODE_ENV === 'test' || process.env.RUN_TESTS === '1' || config.SMTP_HOST === 'test') {
+      transporter = nodemailer.createTransport({
+        jsonTransport: true
+      });
+    } else if (config.SMTP_HOST && config.SMTP_HOST !== 'localhost') {
+      transporter = nodemailer.createTransport({
+        host: config.SMTP_HOST,
+        port: config.SMTP_PORT,
+        secure: config.SMTP_PORT === 465,
+        auth: config.SMTP_USER ? {
+          user: config.SMTP_USER,
+          pass: config.SMTP_PASS
+        } : undefined
+      });
+    } else if (config.SMTP_HOST === 'localhost' && config.isProduction) {
       transporter = nodemailer.createTransport({
         host: config.SMTP_HOST,
         port: config.SMTP_PORT,
@@ -16,12 +31,25 @@ function getTransporter() {
         } : undefined
       });
     } else {
-      // Fallback stub in development if SMTP is unconfigured
+      // Development fallback nếu SMTP localhost không có mail server lắng nghe
+      const realTransport = nodemailer.createTransport({
+        host: config.SMTP_HOST || 'localhost',
+        port: config.SMTP_PORT || 1025,
+        secure: false,
+        auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASS } : undefined
+      });
+
       transporter = {
         sendMail: async (options) => {
-          // KHÔNG ghi OTP, token vào log
-          console.log(`[MAILER DEV] Simulated email sent to ${options.to} (subject: ${options.subject})`);
-          return { messageId: 'simulated' };
+          try {
+            return await realTransport.sendMail(options);
+          } catch (err) {
+            if (!config.isProduction && (err.code === 'ECONNREFUSED' || err.code === 'ESOCKET')) {
+              // Trong development, nếu local mail server chưa bật thì ghi nhận gửi thành công (KHÔNG log secret/OTP)
+              return { messageId: 'dev-fallback-econnrefused' };
+            }
+            throw err;
+          }
         }
       };
     }
