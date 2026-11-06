@@ -639,9 +639,9 @@ Kiểm chứng nhanh (an toàn, dùng ID không tồn tại):
 
 ### 9.1 Phạm vi bảo vệ
 
-- Không cần đăng nhập: `/login`, `/register`, `/activate`, `/activate/resend`, `/forgot`, `/reset` và file tĩnh (`/css`, `/js`, `/images`).
-- Mọi route khác (toàn bộ cụm CRUD `/dishes`, `/chefs`, `/ingredients`, `/bookmarks` và `/admin/*`) chỉ yêu cầu đăng nhập, **KHÔNG** chặn theo role.
-- API công khai (`/api/*`) trả `401 JSON` khi chưa đăng nhập; trang HTML redirect `303` tới `/login?next=...` (có kiểm tra open redirect an toàn).
+- **Công khai (không cần đăng nhập)**: Trang chủ (`/`), danh mục món ăn (`/dishes`), đầu bếp (`/chefs`), nguyên liệu (`/ingredients`), trang chi tiết, tìm kiếm FTS/fuzzy, danh sách đã lưu (`/bookmarks`), API phân trang/cuộn vô hạn (`/api/*`), các trang xác thực (`/login`, `/register`, `/activate`, `/activate/resend`, `/forgot`, `/reset`) và file tĩnh (`/css`, `/js`, `/images`). Khách vãng lai có thể tự do khám phá và lưu bookmark.
+- **Yêu cầu đăng nhập (`requireAuth`)**: Toàn bộ khu vực quản trị (`/admin/*`: danh sách quản lý, form tạo mới, chỉnh sửa, thao tác cập nhật/xóa món ăn, đầu bếp, nguyên liệu).
+- Khi chưa đăng nhập mà truy cập `/admin/*`, trình duyệt được redirect `303` tới `/login?next=...` (có kiểm tra chống open redirect); API admin (`/admin/api/*`) trả `401 JSON`.
 
 ### 9.2 Session, Cookie & CSRF Protection
 
@@ -737,6 +737,6 @@ RUN_DB_TESTS=1 npm test
 | Bảo vệ biểu mẫu toàn diện với mã chống giả mạo CSRF Token | Hoàn thành |
 | Chống brute force bằng RateLimit (cửa sổ 15p, sai 3 lần bắt reCAPTCHA, sai 10 lần khóa 5p) | Hoàn thành |
 | Xác minh người dùng bằng Google reCAPTCHA v2 phía server qua Google siteverify | Hoàn thành |
-| Phân quyền truy cập `requireAuth` cho toàn bộ khu vực quản trị và CRUD | Hoàn thành |
+| Phân quyền truy cập `requireAuth` cho khu vực quản trị (`/admin/*`) | Hoàn thành |
 
 ---

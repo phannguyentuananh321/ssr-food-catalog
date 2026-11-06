@@ -96,16 +96,12 @@ app.use((req, res, next) => {
 app.use('/', authRoutes);
 app.use('/auth', authRoutes); // Tương thích đường dẫn /auth/*
 
-// Everything below requires an authenticated active session.
-// API requests receive 401 JSON; browser requests are redirected to /login?next=...
-app.use(requireAuth);
-
 // Root Redirect to default Public Catalog
 app.get('/', (req, res) => {
   res.redirect(303, '/dishes');
 });
 
-// Business Entity Public Routes
+// Business Entity Public Routes (công khai, không yêu cầu đăng nhập)
 app.use('/dishes', dishRoutes);
 app.use('/chefs', chefRoutes);
 app.use('/ingredients', ingredientRoutes);
@@ -116,7 +112,7 @@ app.use('/bookmarks', bookmarkRoutes);
 // JSON fragments for Load More / Infinite Scroll and bookmark resolution
 app.use('/api', apiRoutes);
 
-// Admin Portal Routes (chỉ yêu cầu đăng nhập, không chặn theo role)
+// Admin Portal Routes (bắt buộc đăng nhập tài khoản active, xem src/routes/admin.routes.js)
 app.use('/admin', adminRoutes);
 
 // 404 & Global Error Handling Middleware

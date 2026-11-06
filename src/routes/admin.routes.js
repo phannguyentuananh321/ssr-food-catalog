@@ -11,6 +11,10 @@ const { requireAuth } = require('../middleware/auth');
 // Defense in depth: all admin routes require an active authenticated user
 router.use(requireAuth);
 
+router.get('/', (req, res) => {
+  res.redirect(303, '/admin/dishes');
+});
+
 // ==========================================
 // 0. ADMIN RELATION SEARCH (Dish form)
 // ==========================================
