@@ -92,35 +92,71 @@ model DishChef {
   @@index([chefId])
 }
 
-// Application profile keyed by the Supabase Auth user id.
-// Passwords/sessions stay in Supabase Auth; this table only stores the public
-// username and the normalized email used for uniqueness checks.
-model UserProfile {
-  id            String   @id
-  email         String   @unique
-  username      String
-  usernameLower String   @unique
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+// Custom Authentication Models (Session + Cookie + Argon2id)
+model User {
+  id              String               @id @default(uuid())
+  email           String
+  emailNormalized String               @unique
+  displayName     String?
+  passwordHash    String
+  role            String               @default("viewer")
+  status          String               @default("pending")
+  emailVerifiedAt DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  activationChallenge ActivationChallenge?
+  passwordResets      PasswordReset[]
+  sessions            Session[]
 }
 
-// Persistent brute-force counter. Keyed by a hash of IP + account so the raw
-// email/IP are not stored. The counter only resets after a successful login.
-model LoginThrottle {
-  identifier    String    @id
-  failureCount  Int       @default(0)
-  lockedUntil   DateTime?
-  lastFailureAt DateTime  @default(now())
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+model ActivationChallenge {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  purpose         String    @default("activation")
+  otpHash         String
+  expiresAt       DateTime
+  usedAt          DateTime?
+  attempts        Int       @default(0)
+  lockedUntil     DateTime?
+  lastSentAt      DateTime  @default(now())
+  sendCount       Int       @default(1)
+  sendWindowStart DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  @@index([lockedUntil])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// Fixed-window registration limiter keyed by a hash of the client IP.
-model RegistrationThrottle {
-  identifier  String   @id
-  count       Int      @default(0)
-  windowStart DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  sid       String   @id
+  userId    String?
+  data      String   @db.Text
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RateLimit {
+  key         String    @id
+  count       Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
 }
