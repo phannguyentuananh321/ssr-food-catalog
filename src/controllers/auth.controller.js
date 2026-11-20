@@ -583,17 +583,18 @@ async function verifyMfa(req, res, next) {
 
     let isValid = false;
     let usedRecoveryCodeId = null;
+    const cleanCode = rawCode.replace(/\s+/g, '');
 
-    // 1. Kiểm tra mã TOTP 6 số
-    if (/^\d{6}$/.test(rawCode)) {
-      isValid = verifyTotp(rawCode, user.twoFactorSecret);
+    // 1. Kiểm tra mã TOTP 6 số (chấp nhận cả trường hợp người dùng nhập khoảng trắng)
+    if (/^\d{6}$/.test(cleanCode)) {
+      isValid = verifyTotp(cleanCode, user.twoFactorSecret);
     }
 
     // 2. Nếu không phải TOTP hoặc TOTP sai, kiểm tra xem có khớp Recovery Code chưa dùng không
     if (!isValid && user.recoveryCodes && user.recoveryCodes.length > 0) {
       const unusedCodes = user.recoveryCodes.filter(rc => !rc.usedAt);
       for (const rc of unusedCodes) {
-        if (verifyRecoveryCode(rawCode, rc.codeHash)) {
+        if (verifyRecoveryCode(rawCode, rc.codeHash) || verifyRecoveryCode(cleanCode, rc.codeHash)) {
           isValid = true;
           usedRecoveryCodeId = rc.id;
           break;
@@ -635,15 +636,13 @@ async function verifyMfa(req, res, next) {
     pending.attempts = (pending.attempts || 0) + 1;
     const emailKey = `login-email:${user.emailNormalized}`;
     const ipKey = `login-ip:${req.ip}`;
-    const { incrementRateLimit, setRateLimitLock } = require('../services/rate-limit.service');
-    await incrementRateLimit(emailKey, 15 * 60 * 1000);
-    await incrementRateLimit(ipKey, 15 * 60 * 1000);
+    const { recordLoginFailure } = require('../services/rate-limit.service');
+    // Ghi nhận lần sai: cửa sổ 15 phút, sai 5 lần khóa 15 phút
+    await recordLoginFailure(emailKey, 15 * 60 * 1000, 5, 15 * 60 * 1000);
+    await recordLoginFailure(ipKey, 15 * 60 * 1000, 5, 15 * 60 * 1000);
 
     // Nếu nhập sai từ 5 lần trở lên: KHÓA TẠM 15 PHÚT, HỦY mfaPending, trả 429
     if (pending.attempts >= 5) {
-      const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-      await setRateLimitLock(emailKey, lockUntil);
-      await setRateLimitLock(ipKey, lockUntil);
       delete req.session.mfaPending;
 
       return res.status(429).render('errors/429', {
@@ -653,15 +652,17 @@ async function verifyMfa(req, res, next) {
       });
     }
 
-    const remaining = 5 - pending.attempts;
-    return res.status(200).render('auth/mfa', {
-      pageTitle: 'Xác Thực 2 Bước (2FA)',
-      currentPath: req.path,
-      csrfToken: resLocalsCsrf(req),
-      email: pending.email || '',
-      errors: { code: 'Mã xác thực không chính xác.' },
-      errorMessage: `Mã xác thực không chính xác. Bạn còn ${remaining} lần thử trước khi tài khoản bị khóa tạm thời.`,
-      remainingAttempts: remaining
+    const remaining = Math.max(0, 5 - pending.attempts);
+    return req.session.save(() => {
+      return res.status(200).render('auth/mfa', {
+        pageTitle: 'Xác Thực 2 Bước (2FA)',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        email: pending.email || '',
+        errors: { code: 'Mã xác thực không chính xác.' },
+        errorMessage: `Mã xác thực không chính xác. Bạn còn ${remaining} lần thử trước khi tài khoản bị khóa tạm thời.`,
+        remainingAttempts: remaining
+      });
     });
   } catch (error) {
     return next(error);
