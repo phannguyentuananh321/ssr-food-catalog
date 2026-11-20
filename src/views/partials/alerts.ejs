@@ -1,3 +1,60 @@
+<% if (typeof newlyCreatedRecoveryCodes !== 'undefined' && newlyCreatedRecoveryCodes && newlyCreatedRecoveryCodes.length > 0) { %>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+    <div class="bg-[#FAF5EC] border-2 border-[#354B35] rounded-2xl p-6 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-full bg-[#354B35] text-[#FFFDF8] flex items-center justify-center shrink-0 mt-0.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-serif text-lg font-bold text-[#354B35]">Mã Khôi Phục Dự Phòng Của Bạn (Lưu lại ngay!)</h3>
+            <p class="text-xs text-[#7A7062] mt-1">
+              Đây là chìa khóa duy nhất để bạn đăng nhập nếu mất điện thoại. <strong>Các mã này chỉ hiển thị đúng 1 lần duy nhất trên màn hình này</strong>. Mỗi mã chỉ dùng được 1 lần.
+            </p>
+          </div>
+        </div>
+        <button onclick="this.closest('.max-w-7xl').remove()" class="btn btn-ghost btn-xs text-[#7A7062]">✕</button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2.5 bg-[#FFFDF8] border border-[#E9E0D2] rounded-xl p-4 font-mono text-center text-sm font-bold text-[#292820]">
+        <% newlyCreatedRecoveryCodes.forEach(code => { %>
+          <div class="bg-[#FAF5EC] border border-[#E9E0D2] py-2 px-1 rounded-lg select-all">
+            <%= code %>
+          </div>
+        <% }) %>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" onclick="copyAlertRecoveryCodes()" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-lg font-medium">
+          Sao Chép Tất Cả Mã
+        </button>
+        <button type="button" onclick="downloadAlertRecoveryCodes()" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] rounded-lg font-medium">
+          Tải File (.txt)
+        </button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const globalRecoveryCodesList = `<%= newlyCreatedRecoveryCodes.join('\\n') %>`;
+    function copyAlertRecoveryCodes() {
+      navigator.clipboard.writeText(globalRecoveryCodesList).then(() => {
+        alert('Đã sao chép danh sách mã dự phòng vào bộ nhớ tạm!');
+      });
+    }
+    function downloadAlertRecoveryCodes() {
+      const element = document.createElement('a');
+      const file = new Blob([globalRecoveryCodesList], { type: 'text/plain' });
+      element.href = URL.createObjectURL(file);
+      element.download = 'amvi-recovery-codes.txt';
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    }
+  </script>
+<% } %>
+
 <% if (typeof successMessage !== 'undefined' && successMessage) { %>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
     <div role="alert" class="alert bg-[#354B35]/10 border border-[#354B35]/30 text-[#354B35] flex items-center justify-between rounded-xl shadow-xs py-3 px-4">

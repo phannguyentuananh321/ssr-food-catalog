@@ -58,60 +58,6 @@
     </div>
   </div>
 
-  <!-- Khối 2: Danh sách Mã Dự Phòng Mới Được Cấp (Chỉ hiện khi vừa kích hoạt / tạo mới) -->
-  <% if (typeof newlyCreatedRecoveryCodes !== 'undefined' && newlyCreatedRecoveryCodes && newlyCreatedRecoveryCodes.length > 0) { %>
-    <div class="bg-[#FAF5EC] border-2 border-[#354B35] rounded-2xl p-6 sm:p-8 mb-8 shadow-sm">
-      <div class="flex items-start gap-3">
-        <div class="w-8 h-8 rounded-full bg-[#354B35] text-[#FFFDF8] flex items-center justify-center shrink-0 mt-0.5">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-          </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="font-serif text-lg font-bold text-[#354B35]">Mã Dự Phòng Của Bạn (Lưu lại ngay!)</h3>
-          <p class="text-xs text-[#7A7062] mt-1">
-            Đây là chìa khóa duy nhất để bạn đăng nhập nếu mất điện thoại. <strong>Các mã này chỉ hiển thị đúng 1 lần duy nhất trên màn hình này</strong>. Mỗi mã chỉ dùng được 1 lần.
-          </p>
-        </div>
-      </div>
-
-      <div class="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2.5 bg-[#FFFDF8] border border-[#E9E0D2] rounded-xl p-4 font-mono text-center text-sm font-bold text-[#292820]">
-        <% newlyCreatedRecoveryCodes.forEach(code => { %>
-          <div class="bg-[#FAF5EC] border border-[#E9E0D2] py-2 px-1 rounded-lg select-all">
-            <%= code %>
-          </div>
-        <% }) %>
-      </div>
-
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" onclick="copyRecoveryCodes()" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-lg font-medium">
-          Sao Chép Tất Cả Mã
-        </button>
-        <button type="button" onclick="downloadRecoveryCodes()" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] rounded-lg font-medium">
-          Tải File (.txt)
-        </button>
-      </div>
-    </div>
-
-    <script>
-      const codesList = `<%= newlyCreatedRecoveryCodes.join('\\n') %>`;
-      function copyRecoveryCodes() {
-        navigator.clipboard.writeText(codesList).then(() => {
-          alert('Đã sao chép danh sách mã dự phòng vào bộ nhớ tạm!');
-        });
-      }
-      function downloadRecoveryCodes() {
-        const element = document.createElement('a');
-        const file = new Blob([codesList], { type: 'text/plain' });
-        element.href = URL.createObjectURL(file);
-        element.download = 'amvi-recovery-codes.txt';
-        document.body.appendChild(element);
-        element.click();
-        document.body.removeChild(element);
-      }
-    </script>
-  <% } %>
-
   <!-- Khối 3: Xác Thực 2 Bước (MFA / Google Authenticator) -->
   <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-6 sm:p-8 shadow-xs">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E9E0D2]">
@@ -162,7 +108,7 @@
                 Mở ứng dụng <strong>Google Authenticator</strong> (hoặc Authy/Microsoft Authenticator), xem dãy 6 chữ số vừa tạo cho <strong>Ấm Vị (<%= user.email %>)</strong> và nhập vào đây:
               </p>
 
-              <form method="POST" action="/settings/2fa/confirm" class="space-y-4">
+              <form id="form-confirm-2fa" method="POST" action="/settings/2fa/confirm" class="space-y-4">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
                 <div>
@@ -175,13 +121,13 @@
                   <button type="submit" class="btn flex-1 bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium">
                     Hoàn Tất & Bật 2FA
                   </button>
-                  <form method="POST" action="/settings/2fa/cancel" class="inline">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button type="submit" class="btn btn-ghost text-xs text-[#7A7062] hover:text-[#B86F45]">
-                      Hủy bỏ
-                    </button>
-                  </form>
+                  <button type="submit" form="form-cancel-2fa" class="btn btn-ghost text-xs text-[#7A7062] hover:text-[#B86F45]">
+                    Hủy bỏ
+                  </button>
                 </div>
+              </form>
+              <form id="form-cancel-2fa" method="POST" action="/settings/2fa/cancel" class="hidden">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               </form>
             </div>
           </div>

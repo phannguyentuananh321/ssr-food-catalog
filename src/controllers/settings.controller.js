@@ -76,7 +76,10 @@ async function start2faSetup(req, res, next) {
       recoveryCodes
     };
 
-    return res.redirect(303, '/settings/security');
+    return req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(303, '/settings/security');
+    });
   } catch (error) {
     return next(error);
   }
@@ -88,7 +91,10 @@ async function start2faSetup(req, res, next) {
 async function cancel2faSetup(req, res, next) {
   try {
     delete req.session.temp2fa;
-    return res.redirect(303, '/settings/security');
+    return req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(303, '/settings/security');
+    });
   } catch (error) {
     return next(error);
   }
@@ -102,7 +108,7 @@ async function confirm2fa(req, res, next) {
     const temp2fa = req.session.temp2fa;
     if (!temp2fa || !temp2fa.secret) {
       req.session.flash = { errorMessage: 'Phiên thiết lập 2FA đã hết hạn. Vui lòng thử lại.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     const code = String(req.body.code || '').trim();
@@ -112,7 +118,7 @@ async function confirm2fa(req, res, next) {
       req.session.flash = {
         errorMessage: 'Mã xác thực không chính xác. Vui lòng kiểm tra lại đồng hồ điện thoại và mã trên Google Authenticator.'
       };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     // Mã đúng: Chính thức lưu vào DB và cấp 10 mã dự phòng
@@ -147,11 +153,15 @@ async function confirm2fa(req, res, next) {
 
     // Flash mã bản rõ để người dùng tải về/chép đúng 1 lần duy nhất
     req.session.flash = {
-      notice: 'Kích hoạt xác thực 2 bước thành công! Hãy lưu lại danh sách mã dự phòng bên dưới.',
+      notice: 'Kích hoạt xác thực 2 bước (2FA) thành công! Hãy lưu lại danh sách 10 mã dự phòng bên dưới.',
       newlyCreatedRecoveryCodes: plainCodes
     };
 
-    return res.redirect(303, '/settings/security');
+    // Chuyển hướng về trang chủ (/dishes) theo đúng yêu cầu
+    return req.session.save((saveErr) => {
+      if (saveErr) return next(saveErr);
+      return res.redirect(303, '/dishes');
+    });
   } catch (error) {
     return next(error);
   }
@@ -167,7 +177,7 @@ async function disable2fa(req, res, next) {
 
     if (!password || !code) {
       req.session.flash = { errorMessage: 'Vui lòng nhập đầy đủ mật khẩu hiện tại và mã xác thực Google Authenticator để tắt 2FA.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     const user = await prisma.user.findUnique({
@@ -176,21 +186,21 @@ async function disable2fa(req, res, next) {
 
     if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
       req.session.flash = { errorMessage: 'Tài khoản chưa bật tính năng 2FA.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     // 1. Kiểm tra mật khẩu (Yếu tố 1: Thứ bạn biết)
     const isPasswordOk = await verifyPassword(user.passwordHash, password);
     if (!isPasswordOk) {
       req.session.flash = { errorMessage: 'Mật khẩu hiện tại không chính xác. Không thể tắt bảo vệ 2 lớp.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     // 2. Kiểm tra mã TOTP (Yếu tố 2: Thứ bạn sở hữu)
     const isTotpOk = verifyTotp(code, user.twoFactorSecret);
     if (!isTotpOk) {
       req.session.flash = { errorMessage: 'Mã xác thực Google Authenticator không chính xác. Không thể tắt bảo vệ 2 lớp.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     // Cả 2 đều đúng -> Tắt 2FA và xóa toàn bộ mã dự phòng
@@ -209,7 +219,10 @@ async function disable2fa(req, res, next) {
     });
 
     req.session.flash = { notice: 'Đã tắt tính năng xác thực 2 bước (2FA) thành công.' };
-    return res.redirect(303, '/settings/security');
+    return req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(303, '/settings/security');
+    });
   } catch (error) {
     return next(error);
   }
@@ -226,7 +239,7 @@ async function regenerateRecoveryCodes(req, res, next) {
 
     if (!password || !code) {
       req.session.flash = { errorMessage: 'Vui lòng nhập mật khẩu và mã Google Authenticator để tạo lại mã dự phòng.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     const user = await prisma.user.findUnique({
@@ -235,7 +248,7 @@ async function regenerateRecoveryCodes(req, res, next) {
 
     if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
       req.session.flash = { errorMessage: 'Tài khoản chưa bật tính năng 2FA.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     // Kiểm tra Password và TOTP
@@ -244,7 +257,7 @@ async function regenerateRecoveryCodes(req, res, next) {
 
     if (!isPasswordOk || !isTotpOk) {
       req.session.flash = { errorMessage: 'Mật khẩu hoặc mã xác thực không chính xác. Không thể tạo lại mã dự phòng.' };
-      return res.redirect(303, '/settings/security');
+      return req.session.save(() => res.redirect(303, '/settings/security'));
     }
 
     // Sinh 10 mã dự phòng mới
@@ -269,7 +282,10 @@ async function regenerateRecoveryCodes(req, res, next) {
       newlyCreatedRecoveryCodes: plainCodes
     };
 
-    return res.redirect(303, '/settings/security');
+    return req.session.save((err) => {
+      if (err) return next(err);
+      return res.redirect(303, '/settings/security');
+    });
   } catch (error) {
     return next(error);
   }

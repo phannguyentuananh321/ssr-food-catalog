@@ -82,6 +82,17 @@ app.use((req, res, next) => {
   res.locals.loggedIn = Boolean(req.user);
   res.locals.currentPath = req.path;
   res.locals.recaptchaSiteKey = config.RECAPTCHA_SITE_KEY;
+
+  // Flash message toàn cục chuyển vào res.locals để hiển thị qua alerts
+  if (req.session && req.session.flash) {
+    if (req.session.flash.notice) res.locals.successMessage = req.session.flash.notice;
+    if (req.session.flash.errorMessage) res.locals.errorMessage = req.session.flash.errorMessage;
+    if (req.session.flash.newlyCreatedRecoveryCodes) {
+      res.locals.newlyCreatedRecoveryCodes = req.session.flash.newlyCreatedRecoveryCodes;
+    }
+    delete req.session.flash;
+  }
+
   next();
 });
 
