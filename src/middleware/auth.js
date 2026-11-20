@@ -46,6 +46,16 @@ async function attachUser(req, res, next) {
     });
 
     if (user && user.status === 'active') {
+      // Tự động đồng bộ role từ cấu hình .env (Bootstrap Role)
+      const { config } = require('../config/env');
+      if (config.INITIAL_ADMIN_EMAIL && user.emailNormalized === config.INITIAL_ADMIN_EMAIL && user.role !== 'admin') {
+        await prisma.user.update({ where: { id: user.id }, data: { role: 'admin' } });
+        user.role = 'admin';
+      } else if (config.INITIAL_EDITOR_EMAILS && config.INITIAL_EDITOR_EMAILS.includes(user.emailNormalized) && user.role === 'viewer') {
+        await prisma.user.update({ where: { id: user.id }, data: { role: 'editor' } });
+        user.role = 'editor';
+      }
+
       req.user = user;
       res.locals.currentUser = {
         id: user.id,
