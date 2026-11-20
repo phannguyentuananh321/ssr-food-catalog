@@ -42,6 +42,13 @@ const config = {
   REGISTRATION_LIMIT: parseInt(process.env.REGISTRATION_LIMIT, 10) || 5,
   REGISTRATION_WINDOW_MINUTES: parseInt(process.env.REGISTRATION_WINDOW_MINUTES, 10) || 60,
 
+  // Initial Roles Bootstrap (.env)
+  INITIAL_ADMIN_EMAIL: (process.env.INITIAL_ADMIN_EMAIL || '').trim().toLowerCase(),
+  INITIAL_EDITOR_EMAILS: (process.env.INITIAL_EDITOR_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean),
+
   isProduction: process.env.NODE_ENV === 'production',
   isDevelopment: process.env.NODE_ENV !== 'production'
 };

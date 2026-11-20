@@ -92,22 +92,38 @@ model DishChef {
   @@index([chefId])
 }
 
-// Custom Authentication Models (Session + Cookie + Argon2id)
+// Custom Authentication Models (Session + Cookie + Argon2id + MFA)
 model User {
-  id              String               @id @default(uuid())
-  email           String
-  emailNormalized String               @unique
-  displayName     String?
-  passwordHash    String
-  role            String               @default("viewer")
-  status          String               @default("pending")
-  emailVerifiedAt DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id               String               @id @default(uuid())
+  email            String
+  emailNormalized  String               @unique
+  displayName      String?
+  passwordHash     String
+  role             String               @default("viewer")
+  status           String               @default("pending")
+  emailVerifiedAt  DateTime?
+  twoFactorEnabled Boolean              @default(false)
+  twoFactorSecret  String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   activationChallenge ActivationChallenge?
   passwordResets      PasswordReset[]
   sessions            Session[]
+  recoveryCodes       RecoveryCode[]
+}
+
+model RecoveryCode {
+  id        String    @id @default(uuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([userId, codeHash])
 }
 
 model ActivationChallenge {

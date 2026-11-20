@@ -18,8 +18,17 @@ const {
   validateForgot,
   validatePasswordReset
 } = require('../src/validators/auth.validator');
-const { safeNextPath, requireAuth } = require('../src/middleware/auth');
+const { safeNextPath, requireAuth, requireRole, requireAdmin } = require('../src/middleware/auth');
 const { verifyCsrfToken } = require('../src/middleware/csrf');
+const {
+  generateMfaSecret,
+  generateKeyuri,
+  verifyTotp,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  verifyRecoveryCode
+} = require('../src/lib/mfa');
+const otplib = require('otplib');
 const { hashPassword, verifyPassword, verifyDummy } = require('../src/lib/password');
 const {
   normalizeEmail,
@@ -463,6 +472,240 @@ async function run() {
     assert.ok(appSource.includes('Referrer-Policy') && appSource.includes('no-referrer'), 'Thiếu Referrer-Policy: no-referrer');
   });
 
+  // 12b. RBAC Tests (Pure Role-Based Access Control)
+  console.log('\n12b. Kiểm thử phân quyền Pure RBAC (viewer, editor, admin):');
+
+  it('requireRole: Chặn người dùng chưa đăng nhập (303 cho HTML, 401 cho JSON)', () => {
+    const mw = requireRole(['admin']);
+
+    // Case 1: HTML request -> redirect 303 tới /login?next=...
+    let redirectedUrl = null;
+    let redirectStatus = null;
+    const reqHtml = {
+      originalUrl: '/admin/dishes',
+      user: null,
+      accepts: (types) => (types.includes('html') ? 'html' : false)
+    };
+    const resHtml = {
+      redirect: (status, url) => {
+        redirectStatus = status;
+        redirectedUrl = url;
+      }
+    };
+    mw(reqHtml, resHtml, () => {
+      assert.fail('Không được gọi next() khi chưa đăng nhập');
+    });
+    assert.strictEqual(redirectStatus, 303);
+    assert.strictEqual(redirectedUrl, '/login?next=%2Fadmin%2Fdishes');
+
+    // Case 2: JSON API request -> HTTP 401 JSON
+    let jsonStatus = null;
+    let jsonBody = null;
+    const reqJson = {
+      originalUrl: '/api/admin/dishes',
+      user: null,
+      accepts: () => 'json'
+    };
+    const resJson = {
+      status: (st) => {
+        jsonStatus = st;
+        return {
+          json: (body) => {
+            jsonBody = body;
+          }
+        };
+      }
+    };
+    mw(reqJson, resJson, () => {
+      assert.fail('Không được gọi next() khi chưa đăng nhập API');
+    });
+    assert.strictEqual(jsonStatus, 401);
+    assert.strictEqual(jsonBody.error, 'UNAUTHENTICATED');
+  });
+
+  it('requireRole: Trả về HTTP 403 Forbidden khi vai trò không đủ quyền', () => {
+    const adminOnly = requireRole(['admin']);
+    const editorOrAdmin = requireRole(['editor', 'admin']);
+
+    // Case 1: viewer truy cập route editor/admin qua HTML -> HTTP 403 render errors/403
+    let status403 = null;
+    let renderedView = null;
+    const reqViewerHtml = {
+      originalUrl: '/admin/dishes',
+      user: { id: 'u1', role: 'viewer', status: 'active' },
+      accepts: () => 'html'
+    };
+    const resViewerHtml = {
+      status: (st) => {
+        status403 = st;
+        return {
+          render: (view, data) => {
+            renderedView = view;
+          }
+        };
+      }
+    };
+    editorOrAdmin(reqViewerHtml, resViewerHtml, () => {
+      assert.fail('viewer không được phép truy cập admin routes');
+    });
+    assert.strictEqual(status403, 403);
+    assert.strictEqual(renderedView, 'errors/403');
+
+    // Case 2: editor gọi thao tác DELETE (admin only) qua JSON -> HTTP 403 JSON
+    let statusDelete = null;
+    let bodyDelete = null;
+    const reqEditorJson = {
+      originalUrl: '/admin/api/dishes/1',
+      user: { id: 'u2', role: 'editor', status: 'active' },
+      accepts: () => 'json'
+    };
+    const resEditorJson = {
+      status: (st) => {
+        statusDelete = st;
+        return {
+          json: (body) => {
+            bodyDelete = body;
+          }
+        };
+      }
+    };
+    adminOnly(reqEditorJson, resEditorJson, () => {
+      assert.fail('editor không được phép xóa (DELETE chỉ dành cho admin)');
+    });
+    assert.strictEqual(statusDelete, 403);
+    assert.strictEqual(bodyDelete.error, 'FORBIDDEN');
+  });
+
+  it('requireRole: Cho phép đúng vai trò được cấu hình đi tiếp (next())', () => {
+    const editorOrAdmin = requireRole(['editor', 'admin']);
+    const adminOnly = requireRole(['admin']);
+
+    let editorCalledNext = false;
+    editorOrAdmin({ user: { role: 'editor' } }, {}, () => {
+      editorCalledNext = true;
+    });
+    assert.strictEqual(editorCalledNext, true, 'editor phải được vào route editor/admin');
+
+    let adminCalledNext = false;
+    adminOnly({ user: { role: 'admin' } }, {}, () => {
+      adminCalledNext = true;
+    });
+    assert.strictEqual(adminCalledNext, true, 'admin phải được vào route admin');
+  });
+
+  it('Pure RBAC: Server bảo vệ toàn bộ thao tác DELETE ở admin.routes.js và schema không dùng ABAC', () => {
+    const adminRoutesSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'admin.routes.js'), 'utf8');
+    
+    // Đảm bảo router admin yêu cầu tối thiểu editor/admin
+    assert.ok(adminRoutesSource.includes("requireRole(['admin', 'editor'])"), 'admin.routes.js phải yêu cầu editor/admin');
+    
+    // Đảm bảo tất cả route DELETE món, đầu bếp, nguyên liệu yêu cầu admin
+    assert.ok(adminRoutesSource.includes("router.delete('/dishes/:id', requireRole(['admin'])"), 'DELETE /dishes/:id phải chỉ dành cho admin');
+    assert.ok(adminRoutesSource.includes("router.delete('/chefs/:id', requireRole(['admin'])"), 'DELETE /chefs/:id phải chỉ dành cho admin');
+    assert.ok(adminRoutesSource.includes("router.delete('/ingredients/:id', requireRole(['admin'])"), 'DELETE /ingredients/:id phải chỉ dành cho admin');
+
+    // Đảm bảo Pure RBAC: Không có authorId hay status trong Dish, Chef, Ingredient
+    const schemaSource = fs.readFileSync(path.join(__dirname, '..', 'prisma', 'schema.prisma'), 'utf8');
+    const dishModel = schemaSource.split('model Dish {')[1]?.split('}')[0] || '';
+    assert.ok(!dishModel.includes('authorId'), 'Pure RBAC: Model Dish không chứa authorId');
+    assert.ok(!dishModel.includes('status'), 'Pure RBAC: Model Dish không chứa status bản nháp/duyệt');
+  });
+
+  // 12c. MFA Tests (TOTP & Recovery Codes)
+  console.log('\n12c. Kiểm thử Xác thực đa yếu tố MFA (TOTP Google Authenticator & Recovery Codes):');
+
+  it('generateMfaSecret & generateKeyuri sinh secret base32 và otpauth URI chuẩn', () => {
+    const secret = generateMfaSecret();
+    assert.ok(typeof secret === 'string' && secret.length >= 16, 'Secret TOTP phải là chuỗi base32 hợp lệ');
+
+    const uri = generateKeyuri('user@example.com', secret);
+    assert.ok(uri.startsWith('otpauth://totp/'), 'URI phải theo định dạng otpauth://totp/');
+    assert.ok(decodeURIComponent(uri).includes('user@example.com'), 'URI phải chứa email');
+    assert.ok(uri.includes('secret='), 'URI phải chứa param secret');
+  });
+
+  it('verifyTotp kiểm tra mã 6 chữ số chính xác và từ chối mã sai', () => {
+    const secret = generateMfaSecret();
+    const token = otplib.generateSync({ secret });
+
+    assert.strictEqual(verifyTotp(token, secret), true, 'Mã TOTP hợp lệ phải verify thành công');
+    assert.strictEqual(verifyTotp('000000', secret), false, 'Mã TOTP sai phải bị từ chối');
+    assert.strictEqual(verifyTotp('', secret), false, 'Mã rỗng phải bị từ chối');
+    assert.strictEqual(verifyTotp(null, secret), false, 'Mã null phải bị từ chối');
+  });
+
+  it('generateRecoveryCodes sinh danh sách mã định dạng XXXX-XXXX duy nhất', () => {
+    const codes = generateRecoveryCodes(10);
+    assert.strictEqual(codes.length, 10, 'Phải sinh đúng 10 mã khôi phục');
+
+    const codeRegex = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+    codes.forEach((code) => {
+      assert.ok(codeRegex.test(code), `Mã ${code} phải có định dạng XXXX-XXXX`);
+    });
+
+    const uniqueCodes = new Set(codes);
+    assert.strictEqual(uniqueCodes.size, 10, '10 mã khôi phục sinh ra phải duy nhất');
+  });
+
+  it('hashRecoveryCode và verifyRecoveryCode: băm SHA-256 không phân biệt hoa/thường, timingSafeEqual', () => {
+    const code = 'ABCD-EFGH';
+    const hashUpper = hashRecoveryCode(code);
+    const hashLower = hashRecoveryCode('abcd-efgh');
+    const hashNoDash = hashRecoveryCode('abcdefgh');
+
+    assert.strictEqual(hashUpper, hashLower, 'Băm phải chuẩn hóa chữ thường');
+    assert.strictEqual(hashUpper, hashNoDash, 'Băm phải chuẩn hóa bỏ gạch nối');
+
+    assert.strictEqual(verifyRecoveryCode('abcd-efgh', hashUpper), true, 'Verify code thường với hash hoa phải khớp');
+    assert.strictEqual(verifyRecoveryCode('ABCD-EFGH', hashUpper), true, 'Verify code hoa với hash hoa phải khớp');
+    assert.strictEqual(verifyRecoveryCode('WRON-CODE', hashUpper), false, 'Verify mã sai phải trả về false');
+  });
+
+  it('Bảo vệ đăng nhập MFA: session chưa hoàn chỉnh (mfaPending) không có quyền truy cập người dùng', () => {
+    // Kiểm tra attachUser không nạp user khi chỉ có mfaPending mà không có userId
+    const reqWithMfaPending = {
+      session: {
+        cookie: { maxAge: 0 },
+        mfaPending: {
+          userId: 'some-user-id',
+          email: 'test@example.com',
+          expiresAt: Date.now() + 5 * 60 * 1000
+        }
+      }
+    };
+    const res = {
+      locals: {}
+    };
+
+    const { attachUser } = require('../src/middleware/auth');
+    let nextCalled = false;
+    attachUser(reqWithMfaPending, res, () => {
+      nextCalled = true;
+    });
+
+    assert.strictEqual(nextCalled, true);
+    assert.strictEqual(reqWithMfaPending.user, null, 'Chưa xác thực MFA thì req.user phải là null');
+    assert.strictEqual(res.locals.currentUser, null, 'currentUser phải là null để tránh bypass MFA');
+  });
+
+  it('Không log secret, recovery code, hay codeHash ra console trong toàn bộ mã nguồn', () => {
+    const filesToCheck = [
+      'src/lib/mfa.js',
+      'src/controllers/auth.controller.js',
+      'src/controllers/settings.controller.js',
+      'src/services/custom-auth.service.js'
+    ];
+    filesToCheck.forEach((relPath) => {
+      const fullPath = path.join(__dirname, '..', relPath);
+      if (fs.existsSync(fullPath)) {
+        const src = fs.readFileSync(fullPath, 'utf8');
+        assert.ok(!/console\.log\([^)]*twoFactorSecret/i.test(src), `${relPath} không được log twoFactorSecret`);
+        assert.ok(!/console\.log\([^)]*codeHash/i.test(src), `${relPath} không được log codeHash`);
+        assert.ok(!/console\.log\([^)]*recoveryCode/i.test(src), `${relPath} không được log recoveryCode`);
+      }
+    });
+  });
+
   // 13. Database Integration Tests (chạy khi có DB kết nối hoặc RUN_DB_TESTS=1)
   const runDb = ['1', 'true', 'yes'].includes(String(process.env.RUN_DB_TESTS).toLowerCase());
   console.log('\n13. Kiểm thử tích hợp cơ sở dữ liệu (RUN_DB_TESTS):');
@@ -576,6 +819,70 @@ async function run() {
       assert.strictEqual(sessAfter, null, 'Session phải bị hủy theo userId');
 
       await prisma.user.delete({ where: { id: testUser.id } });
+    });
+
+    await itAsync('MFA & Recovery Codes DB: tạo user bật 2FA, sinh mã khôi phục và đánh dấu đã sử dụng', async () => {
+      const customAuthService = require('../src/services/custom-auth.service');
+      const testEmail = `mfa_db_${Date.now()}@test.local`;
+      const rawPassword = 'Password123!@#';
+      const secret = generateMfaSecret();
+
+      const registered = await customAuthService.registerUser({
+        email: testEmail,
+        displayName: 'MFA Tester',
+        password: rawPassword,
+        ip: '127.0.0.1'
+      });
+      const user = await prisma.user.update({
+        where: { emailNormalized: testEmail.toLowerCase() },
+        data: {
+          twoFactorEnabled: true,
+          twoFactorSecret: secret,
+          status: 'active'
+        }
+      });
+
+      // Tạo 10 recovery codes trong DB
+      const plainCodes = generateRecoveryCodes(10);
+      await prisma.recoveryCode.createMany({
+        data: plainCodes.map(code => ({
+          userId: user.id,
+          codeHash: hashRecoveryCode(code)
+        }))
+      });
+
+      // Kiểm tra đăng nhập với tài khoản bật 2FA trả về requiresMfa: true
+      const loginRes = await customAuthService.loginUser({
+        email: testEmail,
+        password: rawPassword,
+        ip: '127.0.0.1'
+      });
+      assert.strictEqual(loginRes.requiresMfa, true, 'User bật 2FA phải yêu cầu bước 2 (requiresMfa = true)');
+      assert.strictEqual(loginRes.user.id, user.id);
+
+      // Đánh dấu mã đầu tiên đã dùng
+      const firstCode = plainCodes[0];
+      const firstHash = hashRecoveryCode(firstCode);
+      const foundCode = await prisma.recoveryCode.findFirst({
+        where: { userId: user.id, codeHash: firstHash, usedAt: null }
+      });
+      assert.ok(foundCode, 'Phải tìm thấy mã chưa dùng');
+
+      await prisma.recoveryCode.update({
+        where: { id: foundCode.id },
+        data: { usedAt: new Date() }
+      });
+
+      // Tìm lại mã đó -> phải không thấy vì đã có usedAt
+      const reusedCheck = await prisma.recoveryCode.findFirst({
+        where: { userId: user.id, codeHash: firstHash, usedAt: null }
+      });
+      assert.strictEqual(reusedCheck, null, 'Mã đã sử dụng không được tìm thấy ở trạng thái usedAt: null');
+
+      // Dọn dẹp
+      await prisma.recoveryCode.deleteMany({ where: { userId: user.id } });
+      await prisma.activationChallenge.deleteMany({ where: { userId: user.id } });
+      await prisma.user.delete({ where: { id: user.id } });
     });
   }
 

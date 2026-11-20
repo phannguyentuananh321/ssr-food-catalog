@@ -94,12 +94,44 @@ function requireAuth(req, res, next) {
 }
 
 /**
- * Thay thế requireAdmin:
- * Đặc tả: Mọi route (toàn bộ cụm CRUD và /admin/*) chỉ yêu cầu đăng nhập, KHÔNG chặn theo role.
- * Gỡ requireAdmin và ADMIN_EMAIL; giữ view 403 để dành cho sau.
+ * Middleware requireRole:
+ * Cổng 2 (RBAC): Kiểm tra role của user có nằm trong danh sách được phép không.
+ * - Chưa đăng nhập -> chuyển sang requireAuth (303 /login hoặc 401 JSON).
+ * - Đã đăng nhập nhưng không đủ quyền -> trả về HTTP 403 (render errors/403 hoặc 403 JSON).
+ */
+function requireRole(allowedRoles = []) {
+  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+
+  return (req, res, next) => {
+    // Cổng 1: Phải có phiên đăng nhập
+    if (!req.user) {
+      return requireAuth(req, res, next);
+    }
+
+    // Cổng 2: Role phải thuộc danh sách cho phép
+    if (roles.length > 0 && !roles.includes(req.user.role)) {
+      if (wantsJson(req)) {
+        return res.status(403).json({
+          error: 'FORBIDDEN',
+          message: 'Tài khoản của bạn không có quyền thực hiện thao tác này.'
+        });
+      }
+
+      return res.status(403).render('errors/403', {
+        title: '403 — Không Có Quyền Truy Cập',
+        message: 'Tài khoản của bạn không có quyền truy cập hoặc thực hiện thao tác này.'
+      });
+    }
+
+    return next();
+  };
+}
+
+/**
+ * requireAdmin: alias cho requireRole(['admin'])
  */
 function requireAdmin(req, res, next) {
-  return requireAuth(req, res, next);
+  return requireRole(['admin'])(req, res, next);
 }
 
 function redirectIfAuthenticated(req, res, next) {
@@ -113,6 +145,7 @@ module.exports = {
   attachUser,
   attachAuth: attachUser, // Alias để tương thích nếu cần
   requireAuth,
+  requireRole,
   requireAdmin,
   redirectIfAuthenticated,
   safeNextPath,

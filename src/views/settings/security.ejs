@@ -1,0 +1,296 @@
+<div class="max-w-4xl mx-auto px-4 py-12">
+  <!-- Header Page -->
+  <div class="mb-8">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-[#354B35] flex items-center justify-center text-[#FFFDF8]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="font-serif text-3xl font-bold text-[#292820]">Cài Đặt Bảo Mật & Tài Khoản</h1>
+        <p class="text-sm text-[#7A7062] mt-1">Quản lý danh tính và các phương thức xác thực bảo vệ tài khoản của bạn.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Thông báo Flash (Success / Error) -->
+  <% if (typeof notice !== 'undefined' && notice) { %>
+    <div class="alert bg-[#EEF3EE] border border-[#C9D6C9] text-[#354B35] text-sm rounded-xl mb-6 shadow-xs" role="status">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      <span><%= notice %></span>
+    </div>
+  <% } %>
+
+  <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+    <div class="alert alert-error text-sm rounded-xl mb-6 shadow-xs" role="alert">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      <span><%= errorMessage %></span>
+    </div>
+  <% } %>
+
+  <!-- Khối 1: Thông tin Hồ Sơ & Vai Trò (RBAC) -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-6 sm:p-8 mb-8 shadow-xs">
+    <h2 class="font-serif text-xl font-bold text-[#292820] mb-4 flex items-center gap-2">
+      <span>👤</span> Thông Tin Cá Nhân
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-xl p-4">
+        <span class="block text-xs uppercase tracking-wider text-[#7A7062] font-semibold mb-1">Địa chỉ Email</span>
+        <span class="font-medium text-[#292820] break-all"><%= user.email %></span>
+      </div>
+      <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-xl p-4">
+        <span class="block text-xs uppercase tracking-wider text-[#7A7062] font-semibold mb-1">Tên Hiển Thị</span>
+        <span class="font-medium text-[#292820]"><%= user.displayName %></span>
+      </div>
+      <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-xl p-4">
+        <span class="block text-xs uppercase tracking-wider text-[#7A7062] font-semibold mb-1">Vai Trò Hệ Thống (RBAC)</span>
+        <div class="mt-0.5">
+          <% if (user.role === 'admin') { %>
+            <span class="badge badge-error text-[#FFFDF8] font-bold px-3 py-1">Quản Trị Viên (Admin)</span>
+          <% } else if (user.role === 'editor') { %>
+            <span class="badge bg-[#354B35] text-[#FFFDF8] font-bold px-3 py-1">Biên Tập Viên (Editor)</span>
+          <% } else { %>
+            <span class="badge badge-ghost text-[#7A7062] font-bold px-3 py-1">Thành Viên (Viewer)</span>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Khối 2: Danh sách Mã Dự Phòng Mới Được Cấp (Chỉ hiện khi vừa kích hoạt / tạo mới) -->
+  <% if (typeof newlyCreatedRecoveryCodes !== 'undefined' && newlyCreatedRecoveryCodes && newlyCreatedRecoveryCodes.length > 0) { %>
+    <div class="bg-[#FAF5EC] border-2 border-[#354B35] rounded-2xl p-6 sm:p-8 mb-8 shadow-sm">
+      <div class="flex items-start gap-3">
+        <div class="w-8 h-8 rounded-full bg-[#354B35] text-[#FFFDF8] flex items-center justify-center shrink-0 mt-0.5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="font-serif text-lg font-bold text-[#354B35]">Mã Dự Phòng Của Bạn (Lưu lại ngay!)</h3>
+          <p class="text-xs text-[#7A7062] mt-1">
+            Đây là chìa khóa duy nhất để bạn đăng nhập nếu mất điện thoại. <strong>Các mã này chỉ hiển thị đúng 1 lần duy nhất trên màn hình này</strong>. Mỗi mã chỉ dùng được 1 lần.
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2.5 bg-[#FFFDF8] border border-[#E9E0D2] rounded-xl p-4 font-mono text-center text-sm font-bold text-[#292820]">
+        <% newlyCreatedRecoveryCodes.forEach(code => { %>
+          <div class="bg-[#FAF5EC] border border-[#E9E0D2] py-2 px-1 rounded-lg select-all">
+            <%= code %>
+          </div>
+        <% }) %>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" onclick="copyRecoveryCodes()" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-lg font-medium">
+          Sao Chép Tất Cả Mã
+        </button>
+        <button type="button" onclick="downloadRecoveryCodes()" class="btn btn-sm bg-[#FAF5EC] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] rounded-lg font-medium">
+          Tải File (.txt)
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const codesList = `<%= newlyCreatedRecoveryCodes.join('\\n') %>`;
+      function copyRecoveryCodes() {
+        navigator.clipboard.writeText(codesList).then(() => {
+          alert('Đã sao chép danh sách mã dự phòng vào bộ nhớ tạm!');
+        });
+      }
+      function downloadRecoveryCodes() {
+        const element = document.createElement('a');
+        const file = new Blob([codesList], { type: 'text/plain' });
+        element.href = URL.createObjectURL(file);
+        element.download = 'amvi-recovery-codes.txt';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+      }
+    </script>
+  <% } %>
+
+  <!-- Khối 3: Xác Thực 2 Bước (MFA / Google Authenticator) -->
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl p-6 sm:p-8 shadow-xs">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E9E0D2]">
+      <div>
+        <h2 class="font-serif text-xl font-bold text-[#292820] flex items-center gap-2">
+          <span>🛡️</span> Xác Thực 2 Bước (Google Authenticator)
+        </h2>
+        <p class="text-sm text-[#7A7062] mt-1">
+          Bảo vệ tài khoản bằng mã xác thực 6 số trên ứng dụng điện thoại mỗi khi đăng nhập.
+        </p>
+      </div>
+      <div>
+        <% if (user.twoFactorEnabled) { %>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-[#EEF3EE] text-[#354B35] border border-[#C9D6C9]">
+            <span class="w-2 h-2 rounded-full bg-[#354B35]"></span> Đã Kích Hoạt
+          </span>
+        <% } else { %>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-[#FAF5EC] text-[#7A7062] border border-[#E9E0D2]">
+            <span class="w-2 h-2 rounded-full bg-[#A8A29E]"></span> Chưa Bật
+          </span>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="pt-6">
+      <!-- TRƯỜNG HỢP 1: ĐANG THỰC HIỆN THIẾT LẬP (temp2fa có trong session) -->
+      <% if (!user.twoFactorEnabled && typeof temp2fa !== 'undefined' && temp2fa) { %>
+        <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-2xl p-6">
+          <h3 class="font-serif text-lg font-bold text-[#292820] mb-4">Các bước kích hoạt Google Authenticator:</h3>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <!-- Bước A: Quét mã QR -->
+            <div class="flex flex-col items-center text-center p-4 bg-[#FFFDF8] border border-[#E9E0D2] rounded-xl">
+              <span class="text-xs font-bold text-[#354B35] uppercase mb-2">Bước 1: Quét mã QR trên app</span>
+              <img src="<%= temp2fa.qrCodeDataUrl %>" alt="QR Code Google Authenticator" class="w-52 h-52 rounded-lg border border-[#E9E0D2] shadow-xs">
+              <p class="text-[11px] text-[#7A7062] mt-3">
+                Nếu không quét được, hãy nhập thủ công chuỗi khóa sau vào app:
+              </p>
+              <code class="text-xs font-bold font-mono bg-[#FAF5EC] px-2 py-1 rounded mt-1 border border-[#E9E0D2] select-all">
+                <%= temp2fa.secret %>
+              </code>
+            </div>
+
+            <!-- Bước B: Nhập 6 số xác nhận kích hoạt -->
+            <div>
+              <span class="text-xs font-bold text-[#354B35] uppercase mb-2 block">Bước 2: Nhập mã để kích hoạt</span>
+              <p class="text-xs text-[#7A7062] mb-4">
+                Mở ứng dụng <strong>Google Authenticator</strong> (hoặc Authy/Microsoft Authenticator), xem dãy 6 chữ số vừa tạo cho <strong>Ấm Vị (<%= user.email %>)</strong> và nhập vào đây:
+              </p>
+
+              <form method="POST" action="/settings/2fa/confirm" class="space-y-4">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+                <div>
+                  <input type="text" name="code" required autofocus autocomplete="off"
+                    placeholder="123456" maxlength="6"
+                    class="input input-bordered w-full bg-[#FFFDF8] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-center text-2xl font-mono tracking-widest font-bold">
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                  <button type="submit" class="btn flex-1 bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium">
+                    Hoàn Tất & Bật 2FA
+                  </button>
+                  <form method="POST" action="/settings/2fa/cancel" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button type="submit" class="btn btn-ghost text-xs text-[#7A7062] hover:text-[#B86F45]">
+                      Hủy bỏ
+                    </button>
+                  </form>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+      <!-- TRƯỜNG HỢP 2: ĐÃ BẬT 2FA THÀNH CÔNG -->
+      <% } else if (user.twoFactorEnabled) { %>
+        <div class="space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-[#FAF5EC] border border-[#E9E0D2] rounded-xl">
+            <div>
+              <span class="text-sm font-bold text-[#292820] block">Mã dự phòng (Recovery Codes)</span>
+              <span class="text-xs text-[#7A7062]">
+                Bạn còn <strong class="text-[#354B35]"><%= unusedRecoveryCodesCount %> / <%= totalRecoveryCodesCount %></strong> mã chưa sử dụng.
+              </span>
+            </div>
+            <button type="button" onclick="document.getElementById('modal-regenerate-codes').showModal()"
+              class="btn btn-sm bg-[#FFFDF8] hover:bg-[#E9E0D2] text-[#354B35] border border-[#E9E0D2] rounded-lg font-medium">
+              Tạo Lại Bộ Mã Mới
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between pt-2">
+            <div>
+              <span class="text-sm font-semibold text-[#8A4A25] block">Vô hiệu hóa xác thực 2 bước</span>
+              <span class="text-xs text-[#7A7062]">Tắt lớp bảo vệ 2FA và chỉ đăng nhập bằng mật khẩu thông thường.</span>
+            </div>
+            <button type="button" onclick="document.getElementById('modal-disable-2fa').showModal()"
+              class="btn btn-sm btn-error btn-outline rounded-lg font-medium">
+              Tắt 2FA
+            </button>
+          </div>
+        </div>
+
+        <!-- MODAL: XÁC NHẬN TẮT 2FA (Bắt buộc Password + TOTP) -->
+        <dialog id="modal-disable-2fa" class="modal">
+          <div class="modal-box bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl max-w-md">
+            <h3 class="font-serif font-bold text-xl text-[#8A4A25]">Xác Nhận Tắt Bảo Vệ 2 Lớp</h3>
+            <p class="py-2 text-xs text-[#7A7062]">
+              Vì lý do an toàn, bạn bắt buộc phải nhập đồng thời <strong>Mật khẩu hiện tại</strong> và <strong>Mã Google Authenticator</strong> để tắt tính năng này.
+            </p>
+
+            <form method="POST" action="/settings/2fa/disable" class="space-y-4 mt-3">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+              <div>
+                <label class="block text-xs font-bold text-[#354B35] mb-1">Mật khẩu hiện tại</label>
+                <input type="password" name="password" required autocomplete="current-password"
+                  class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] rounded-xl text-sm" placeholder="••••••••">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-[#354B35] mb-1">Mã xác thực Google Authenticator (6 số)</label>
+                <input type="text" name="code" required autocomplete="off" maxlength="6"
+                  class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] rounded-xl text-center font-mono text-lg font-bold" placeholder="123456">
+              </div>
+
+              <div class="modal-action flex items-center justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modal-disable-2fa').close()" class="btn btn-sm btn-ghost">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-error text-[#FFFDF8]">Xác Nhận Tắt</button>
+              </div>
+            </form>
+          </div>
+        </dialog>
+
+        <!-- MODAL: TẠO LẠI BỘ MÃ DỰ PHÒNG (Bắt buộc Password + TOTP) -->
+        <dialog id="modal-regenerate-codes" class="modal">
+          <div class="modal-box bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl max-w-md">
+            <h3 class="font-serif font-bold text-xl text-[#354B35]">Tạo Lại Bộ Mã Dự Phòng Mới</h3>
+            <p class="py-2 text-xs text-[#7A7062]">
+              Hành động này sẽ <strong>hủy bỏ toàn bộ các mã dự phòng cũ</strong> và cấp cho bạn 10 mã mới tinh. Vui lòng xác thực danh tính:
+            </p>
+
+            <form method="POST" action="/settings/2fa/regenerate-recovery-codes" class="space-y-4 mt-3">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+              <div>
+                <label class="block text-xs font-bold text-[#354B35] mb-1">Mật khẩu hiện tại</label>
+                <input type="password" name="password" required autocomplete="current-password"
+                  class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] rounded-xl text-sm" placeholder="••••••••">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-[#354B35] mb-1">Mã xác thực Google Authenticator (6 số)</label>
+                <input type="text" name="code" required autocomplete="off" maxlength="6"
+                  class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] rounded-xl text-center font-mono text-lg font-bold" placeholder="123456">
+              </div>
+
+              <div class="modal-action flex items-center justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modal-regenerate-codes').close()" class="btn btn-sm btn-ghost">Hủy</button>
+                <button type="submit" class="btn btn-sm bg-[#354B35] text-[#FFFDF8]">Tạo Mã Mới</button>
+              </div>
+            </form>
+          </div>
+        </dialog>
+
+      <!-- TRƯỜNG HỢP 3: CHƯA BẬT 2FA (Hiện nút kích hoạt) -->
+      <% } else { %>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <p class="text-xs text-[#7A7062] max-w-lg">
+            Khi bật tính năng này, sau khi nhập mật khẩu, bạn sẽ cần nhập thêm mã số 6 chữ số từ ứng dụng Google Authenticator trên điện thoại.
+          </p>
+          <form method="POST" action="/settings/2fa/setup">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="btn btn-sm bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium shadow-xs">
+              + Bật Xác Thực 2 Bước
+            </button>
+          </form>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>

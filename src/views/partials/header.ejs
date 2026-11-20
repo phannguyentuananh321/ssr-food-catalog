@@ -52,25 +52,28 @@
             </div>
             <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-[#FFFDF8] border border-[#E9E0D2] rounded-box w-64 z-50 mt-2 text-sm">
               <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold">
-                <%= currentUser.email %>
+                <%= currentUser.email %> (<%= currentUser.role %>)
               </li>
               <li><a href="/bookmarks">Đã Lưu</a></li>
-              <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold mt-2">Quản trị</li>
-              <li>
-                <a href="/admin/dishes" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/dishes')) ? 'active font-bold text-[#354B35]' : '' %>">
-                  🍳 Quản lý Món ăn
-                </a>
-              </li>
-              <li>
-                <a href="/admin/chefs" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/chefs')) ? 'active font-bold text-[#354B35]' : '' %>">
-                  👨‍🍳 Quản lý Đầu bếp
-                </a>
-              </li>
-              <li>
-                <a href="/admin/ingredients" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/ingredients')) ? 'active font-bold text-[#354B35]' : '' %>">
-                  🌿 Quản lý Nguyên liệu
-                </a>
-              </li>
+              <li><a href="/settings/security" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/settings')) ? 'active font-bold text-[#354B35]' : '' %>">🛡️ Cài đặt bảo mật (2FA)</a></li>
+              <% if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'editor')) { %>
+                <li class="menu-title text-xs text-[#B86F45] uppercase tracking-wider font-semibold mt-2">Quản trị</li>
+                <li>
+                  <a href="/admin/dishes" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/dishes')) ? 'active font-bold text-[#354B35]' : '' %>">
+                    🍳 Quản lý Món ăn
+                  </a>
+                </li>
+                <li>
+                  <a href="/admin/chefs" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/chefs')) ? 'active font-bold text-[#354B35]' : '' %>">
+                    👨‍🍳 Quản lý Đầu bếp
+                  </a>
+                </li>
+                <li>
+                  <a href="/admin/ingredients" class="<%= (typeof currentPath !== 'undefined' && currentPath.startsWith('/admin/ingredients')) ? 'active font-bold text-[#354B35]' : '' %>">
+                    🌿 Quản lý Nguyên liệu
+                  </a>
+                </li>
+              <% } %>
               <li class="mt-2">
                 <form method="POST" action="/logout">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -104,7 +107,8 @@
           </label>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-50 p-3 shadow-lg bg-[#FFFDF8] border border-[#E9E0D2] rounded-box w-64 space-y-1">
             <% if (loggedIn) { %>
-              <li class="menu-title text-xs text-[#B86F45] uppercase font-bold truncate"><%= currentUser.email %></li>
+              <li class="menu-title text-xs text-[#B86F45] uppercase font-bold truncate"><%= currentUser.email %> (<%= currentUser.role %>)</li>
+              <li><a href="/settings/security">🛡️ Cài đặt bảo mật (2FA)</a></li>
             <% } %>
             <li class="menu-title text-xs text-[#B86F45] uppercase font-bold">Khám phá</li>
             <li><a href="/dishes">Món Ăn</a></li>
@@ -116,11 +120,13 @@
                 <span data-bookmark-count class="hidden badge badge-sm bg-[#B86F45] text-[#FFFDF8] border-none">0</span>
               </a>
             </li>
-            <li class="menu-title text-xs text-[#B86F45] uppercase font-bold mt-2">Quản trị</li>
-            <% if (loggedIn) { %>
+            <% if (loggedIn && (currentUser.role === 'admin' || currentUser.role === 'editor')) { %>
+              <li class="menu-title text-xs text-[#B86F45] uppercase font-bold mt-2">Quản trị</li>
               <li><a href="/admin/dishes">Quản lý Món ăn</a></li>
               <li><a href="/admin/chefs">Quản lý Đầu bếp</a></li>
               <li><a href="/admin/ingredients">Quản lý Nguyên liệu</a></li>
+            <% } %>
+            <% if (loggedIn) { %>
               <li class="mt-2">
                 <form method="POST" action="/logout">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />

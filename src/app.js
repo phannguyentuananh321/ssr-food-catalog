@@ -17,6 +17,7 @@ const bookmarkRoutes = require('./routes/bookmark.routes');
 const apiRoutes = require('./routes/api.routes');
 const adminRoutes = require('./routes/admin.routes');
 const authRoutes = require('./routes/auth.routes');
+const settingsRoutes = require('./routes/settings.routes');
 
 // Validate environment variables on startup
 validateEnv(false);
@@ -111,6 +112,9 @@ app.use('/bookmarks', bookmarkRoutes);
 
 // JSON fragments for Load More / Infinite Scroll and bookmark resolution
 app.use('/api', apiRoutes);
+
+// User Account & Security Settings Routes (yêu cầu đăng nhập)
+app.use('/settings', settingsRoutes);
 
 // Admin Portal Routes (bắt buộc đăng nhập tài khoản active, xem src/routes/admin.routes.js)
 app.use('/admin', adminRoutes);

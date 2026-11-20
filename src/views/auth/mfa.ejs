@@ -1,0 +1,64 @@
+<div class="max-w-md mx-auto px-4 py-16">
+  <div class="bg-[#FFFDF8] border border-[#E9E0D2] rounded-2xl shadow-sm p-8">
+    <div class="text-center mb-6">
+      <div class="w-14 h-14 mx-auto rounded-full bg-[#354B35] flex items-center justify-center text-[#FFFDF8] mb-4 shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+      <h1 class="font-serif text-2xl sm:text-3xl font-bold text-[#292820]">Xác Thực 2 Bước (2FA)</h1>
+      <p class="text-sm text-[#7A7062] mt-2">
+        Tài khoản <strong class="text-[#354B35]"><%= email %></strong> đã bật bảo vệ 2 lớp.
+      </p>
+    </div>
+
+    <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+      <div class="alert alert-error text-sm rounded-xl mb-5 shadow-xs" role="alert">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span><%= errorMessage %></span>
+      </div>
+    <% } %>
+
+    <form method="POST" action="/login/2fa" class="space-y-5">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <div>
+        <label for="code" class="block text-sm font-semibold text-[#354B35] mb-1.5">
+          Mã xác thực từ Google Authenticator hoặc Mã dự phòng
+        </label>
+        <input id="code" name="code" type="text" required autofocus autocomplete="one-time-code"
+          class="input input-bordered w-full bg-[#FAF5EC] border-[#E9E0D2] focus:border-[#354B35] focus:outline-none rounded-xl text-center text-xl tracking-widest font-mono"
+          placeholder="Ví dụ: 123456 hoặc ABCD-1234">
+        <% if (typeof errors !== 'undefined' && errors && errors.code) { %>
+          <p class="text-xs text-error mt-1.5"><%= errors.code %></p>
+        <% } %>
+      </div>
+
+      <div class="bg-[#FAF5EC] border border-[#E9E0D2] rounded-xl p-3.5 text-xs text-[#7A7062] space-y-1.5">
+        <div class="flex items-center gap-1.5 font-medium text-[#292820]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-[#354B35]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Hướng dẫn nhập:</span>
+        </div>
+        <p>• Mở ứng dụng <strong>Google Authenticator</strong> trên điện thoại và nhập dãy 6 chữ số đang hiển thị.</p>
+        <p>• Nếu mất điện thoại, bạn có thể nhập <strong>Mã dự phòng (Recovery Code)</strong> dạng <code>XXXX-XXXX</code>.</p>
+        <% if (typeof remainingAttempts !== 'undefined') { %>
+          <p class="text-[#B86F45] font-semibold pt-1">
+            ⚠ Bạn còn <%= remainingAttempts %> lần thử trước khi tài khoản bị khóa tạm 15 phút.
+          </p>
+        <% } %>
+      </div>
+
+      <button type="submit" class="btn btn-block bg-[#354B35] hover:bg-[#273727] text-[#FFFDF8] border-none rounded-xl font-medium shadow-xs">
+        Xác Nhận & Đăng Nhập
+      </button>
+
+      <div class="text-center pt-2">
+        <a href="/login" class="text-xs text-[#7A7062] hover:text-[#354B35] underline transition-colors">
+          ← Quay lại trang đăng nhập bằng tài khoản khác
+        </a>
+      </div>
+    </form>
+  </div>
+</div>

@@ -19,10 +19,12 @@ router.post('/verify', authController.activate);
 router.post('/resend-verification', authController.resendActivation);
 
 // ==========================================
-// ĐĂNG NHẬP & ĐĂNG XUẤT (BƯỚC 5 & 6)
+// ĐĂNG NHẬP, MFA & ĐĂNG XUẤT (BƯỚC 5 & 6)
 // ==========================================
 router.get('/login', redirectIfAuthenticated, authController.renderLoginPage);
 router.post('/login', authController.login);
+router.get('/login/2fa', authController.renderMfaPage);
+router.post('/login/2fa', authController.verifyMfa);
 router.post('/logout', authController.logout);
 
 // ==========================================

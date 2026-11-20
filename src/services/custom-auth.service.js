@@ -57,6 +57,14 @@ async function registerUser({ email, displayName, password, ip }) {
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // Hạn 10 phút
   const otpHash = hashOtp(userId, 'activation', otp);
 
+  // Xác định vai trò theo cấu hình bootstrap (.env)
+  let assignedRole = 'viewer';
+  if (config.INITIAL_ADMIN_EMAIL && normalizedEmail === config.INITIAL_ADMIN_EMAIL) {
+    assignedRole = 'admin';
+  } else if (config.INITIAL_EDITOR_EMAILS && config.INITIAL_EDITOR_EMAILS.includes(normalizedEmail)) {
+    assignedRole = 'editor';
+  }
+
   // Tạo User pending và ActivationChallenge trong transaction
   await prisma.$transaction(async (tx) => {
     await tx.user.create({
@@ -66,7 +74,7 @@ async function registerUser({ email, displayName, password, ip }) {
         emailNormalized: normalizedEmail,
         displayName: displayName || null,
         passwordHash,
-        role: 'viewer', // mọi trường role từ client bị bỏ qua
+        role: assignedRole, // áp dụng bootstrap role từ .env hoặc mặc định viewer
         status: 'pending',
         activationChallenge: {
           create: {
@@ -404,11 +412,30 @@ async function loginUser({ email, password, ip, captchaToken }) {
     };
   }
 
-  // 6. Thành công: xóa bộ đếm login-email (không xóa login-ip)
+  // Đồng bộ role bootstrap từ .env nếu tài khoản trước đó chưa được gán
+  if (config.INITIAL_ADMIN_EMAIL && normalizedEmail === config.INITIAL_ADMIN_EMAIL && user.role !== 'admin') {
+    await prisma.user.update({ where: { id: user.id }, data: { role: 'admin' } });
+    user.role = 'admin';
+  } else if (config.INITIAL_EDITOR_EMAILS && config.INITIAL_EDITOR_EMAILS.includes(normalizedEmail) && user.role === 'viewer') {
+    await prisma.user.update({ where: { id: user.id }, data: { role: 'editor' } });
+    user.role = 'editor';
+  }
+
+  // 6. Kiểm tra MFA: Nếu tài khoản đã kích hoạt 2FA, yêu cầu bước 2 (TOTP / Recovery Code)
+  if (user.twoFactorEnabled) {
+    return {
+      success: true,
+      requiresMfa: true,
+      user
+    };
+  }
+
+  // 7. Thành công hoàn tất (không 2FA): xóa bộ đếm login-email (không xóa login-ip)
   await resetRateLimitKey(emailKey);
 
   return {
     success: true,
+    requiresMfa: false,
     user
   };
 }

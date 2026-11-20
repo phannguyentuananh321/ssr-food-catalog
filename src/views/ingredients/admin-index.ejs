@@ -113,12 +113,14 @@
                     <a href="/admin/ingredients/<%= ing.id %>/edit" class="btn btn-xs bg-[#FAF5EC] hover:bg-[#354B35] hover:text-[#FFFDF8] text-[#354B35] border border-[#E9E0D2] rounded-lg font-medium">
                       Sửa
                     </a>
+                    <% if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') { %>
                     <button 
                       type="button" 
                       onclick="openIngDeleteModal('<%= ing.id %>', '<%= ing.name.replace(/'/g, '\\\'') %>')"
                       class="btn btn-xs bg-[#FAF5EC] hover:bg-[#B86F45] hover:text-[#FFFDF8] text-[#B86F45] border border-[#E9E0D2] rounded-lg font-medium">
                       Xóa
                     </button>
+                    <% } %>
                   </div>
                 </td>
               </tr>

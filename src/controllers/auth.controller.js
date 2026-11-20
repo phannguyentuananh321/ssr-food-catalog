@@ -2,6 +2,8 @@ const { config } = require('../config/env');
 const { safeNextPath } = require('../middleware/auth');
 const { verifyRecaptcha } = require('../lib/recaptcha');
 const { normalizeEmail } = require('../lib/tokens');
+const { verifyTotp, verifyRecoveryCode } = require('../lib/mfa');
+const prisma = require('../lib/prisma');
 const {
   validateRegister,
   validateLogin,
@@ -327,8 +329,26 @@ async function login(req, res, next) {
       });
     }
 
-    // Đăng nhập thành công:
-    // 6. regenerate session (sid mới), gán userId, xóa bộ đếm login-email, 303 tới next an toàn hoặc /dishes
+    // Kiểm tra MFA: Nếu tài khoản đã kích hoạt 2FA, bắt buộc qua bước 2 (TOTP / Recovery Code)
+    if (result.requiresMfa) {
+      // TUYỆT ĐỐI KHÔNG GÁN req.session.userId Ở BƯỚC 1!
+      // Chỉ gán đối tượng tạm thời mfaPending với TTL 5 phút
+      req.session.mfaPending = {
+        userId: result.user.id,
+        email: result.user.email,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        attempts: 0,
+        nextPath: nextPath || ''
+      };
+
+      return req.session.save((saveErr) => {
+        if (saveErr) return next(saveErr);
+        return res.redirect(303, '/login/2fa');
+      });
+    }
+
+    // Đăng nhập thành công hoàn tất (không bật 2FA):
+    // regenerate session (sid mới), gán userId, xóa bộ đếm login-email, 303 tới next an toàn hoặc /dishes
     req.session.regenerate((err) => {
       if (err) return next(err);
 
@@ -506,6 +526,148 @@ async function resetPassword(req, res, next) {
   }
 }
 
+// ==========================================
+// BƯỚC 5B: XÁC THỰC 2 LỚP (MFA / TOTP)
+// ==========================================
+
+async function renderMfaPage(req, res) {
+  const pending = req.session.mfaPending;
+  if (!pending || Date.now() > pending.expiresAt) {
+    delete req.session.mfaPending;
+    return res.redirect(303, '/login');
+  }
+
+  const remainingAttempts = Math.max(0, 5 - (pending.attempts || 0));
+
+  return res.render('auth/mfa', {
+    pageTitle: 'Xác Thực 2 Bước (2FA)',
+    currentPath: req.path,
+    csrfToken: resLocalsCsrf(req),
+    email: pending.email || '',
+    errors: {},
+    errorMessage: null,
+    remainingAttempts
+  });
+}
+
+async function verifyMfa(req, res, next) {
+  try {
+    const pending = req.session.mfaPending;
+    if (!pending || Date.now() > pending.expiresAt) {
+      delete req.session.mfaPending;
+      return res.redirect(303, '/login');
+    }
+
+    const rawCode = String(req.body.code || '').trim();
+    if (!rawCode) {
+      return res.status(200).render('auth/mfa', {
+        pageTitle: 'Xác Thực 2 Bước (2FA)',
+        currentPath: req.path,
+        csrfToken: resLocalsCsrf(req),
+        email: pending.email || '',
+        errors: { code: 'Vui lòng nhập mã xác thực hoặc mã dự phòng.' },
+        errorMessage: 'Vui lòng nhập mã xác thực từ Google Authenticator hoặc mã dự phòng.',
+        remainingAttempts: Math.max(0, 5 - (pending.attempts || 0))
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: pending.userId },
+      include: { recoveryCodes: true }
+    });
+
+    if (!user || !user.twoFactorEnabled) {
+      delete req.session.mfaPending;
+      return res.redirect(303, '/login');
+    }
+
+    let isValid = false;
+    let usedRecoveryCodeId = null;
+
+    // 1. Kiểm tra mã TOTP 6 số
+    if (/^\d{6}$/.test(rawCode)) {
+      isValid = verifyTotp(rawCode, user.twoFactorSecret);
+    }
+
+    // 2. Nếu không phải TOTP hoặc TOTP sai, kiểm tra xem có khớp Recovery Code chưa dùng không
+    if (!isValid && user.recoveryCodes && user.recoveryCodes.length > 0) {
+      const unusedCodes = user.recoveryCodes.filter(rc => !rc.usedAt);
+      for (const rc of unusedCodes) {
+        if (verifyRecoveryCode(rawCode, rc.codeHash)) {
+          isValid = true;
+          usedRecoveryCodeId = rc.id;
+          break;
+        }
+      }
+    }
+
+    // HỢP LỆ:
+    if (isValid) {
+      // Nếu là recovery code, đánh dấu usedAt ngay lập tức (Single-use)
+      if (usedRecoveryCodeId) {
+        await prisma.recoveryCode.update({
+          where: { id: usedRecoveryCodeId },
+          data: { usedAt: new Date() }
+        });
+      }
+
+      // Xóa bộ đếm login-email
+      const { resetRateLimitKey } = require('../services/rate-limit.service');
+      await resetRateLimitKey(`login-email:${user.emailNormalized}`);
+
+      const target = pending.nextPath || '/dishes';
+      delete req.session.mfaPending;
+
+      // Cấp session đăng nhập chính thức
+      return req.session.regenerate((err) => {
+        if (err) return next(err);
+        req.session.userId = user.id;
+        req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+
+        req.session.save((saveErr) => {
+          if (saveErr) return next(saveErr);
+          return res.redirect(303, target);
+        });
+      });
+    }
+
+    // KHÔNG HỢP LỆ:
+    pending.attempts = (pending.attempts || 0) + 1;
+    const emailKey = `login-email:${user.emailNormalized}`;
+    const ipKey = `login-ip:${req.ip}`;
+    const { incrementRateLimit, setRateLimitLock } = require('../services/rate-limit.service');
+    await incrementRateLimit(emailKey, 15 * 60 * 1000);
+    await incrementRateLimit(ipKey, 15 * 60 * 1000);
+
+    // Nếu nhập sai từ 5 lần trở lên: KHÓA TẠM 15 PHÚT, HỦY mfaPending, trả 429
+    if (pending.attempts >= 5) {
+      const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      await setRateLimitLock(emailKey, lockUntil);
+      await setRateLimitLock(ipKey, lockUntil);
+      delete req.session.mfaPending;
+
+      return res.status(429).render('errors/429', {
+        pageTitle: 'Tài Khoản Tạm Khóa',
+        title: 'Xác Thực 2 Bước Thất Bại Quá 5 Lần',
+        message: 'Bạn đã nhập sai mã xác thực quá 5 lần. Để bảo vệ tài khoản, hệ thống tạm khóa đăng nhập trong 15 phút. Khi quay lại đăng nhập, bạn sẽ cần giải mã reCAPTCHA.'
+      });
+    }
+
+    const remaining = 5 - pending.attempts;
+    return res.status(200).render('auth/mfa', {
+      pageTitle: 'Xác Thực 2 Bước (2FA)',
+      currentPath: req.path,
+      csrfToken: resLocalsCsrf(req),
+      email: pending.email || '',
+      errors: { code: 'Mã xác thực không chính xác.' },
+      errorMessage: `Mã xác thực không chính xác. Bạn còn ${remaining} lần thử trước khi tài khoản bị khóa tạm thời.`,
+      remainingAttempts: remaining
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   renderRegisterPage,
   register,
@@ -514,6 +676,8 @@ module.exports = {
   resendActivation,
   renderLoginPage,
   login,
+  renderMfaPage,
+  verifyMfa,
   logout,
   renderForgotPage,
   forgotPassword,
